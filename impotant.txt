@@ -1,0 +1,5 @@
+source "/home/minato/Desktop/decetralized cloud storage system/.venv/bin/activate"
+
+./start.sh
+
+killall -9 python uvicorn node npm
