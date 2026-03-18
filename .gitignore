@@ -21,6 +21,11 @@ backend/.env
 *.log
 *.pid
 
+# Local helper scripts (not for deployment)
+start.sh
+status.sh
+test_auth.sh
+
 # Build outputs
 dist/
 build/
