@@ -1,0 +1,16 @@
+.git
+.gitignore
+.venv
+.vscode
+__pycache__
+**/__pycache__
+*.pyc
+*.pyo
+*.pyd
+*.log
+node_modules
+frontend/node_modules
+backend/.env
+.env
+Screenshot from *.png
+ui major project.pdf
