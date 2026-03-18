@@ -1,10 +1,21 @@
 from pydantic_settings import BaseSettings
 from typing import List
+from pydantic import Field, AliasChoices
 
 
 class Settings(BaseSettings):
-    MONGO_URI: str = "mongodb://localhost:27017"
-    DB_NAME: str = "decentrastore"
+    MONGO_URI: str = Field(
+        default="mongodb://localhost:27017",
+        validation_alias=AliasChoices("MONGO_URI", "MONGODB_URI", "MONGO_URL", "DATABASE_URL"),
+    )
+    DB_NAME: str = Field(
+        default="decentrastore",
+        validation_alias=AliasChoices("DB_NAME", "MONGO_DB_NAME", "MONGODB_DB"),
+    )
+    DOCKER_ENABLED: bool = Field(
+        default=False,
+        validation_alias=AliasChoices("DOCKER_ENABLED"),
+    )
     JWT_SECRET: str = "decentrastore_jwt_secret_change_in_production"
     JWT_ALGORITHM: str = "HS256"
     JWT_EXPIRE_MINUTES: int = 1440

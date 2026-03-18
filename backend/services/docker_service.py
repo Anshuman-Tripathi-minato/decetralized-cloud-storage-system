@@ -6,6 +6,7 @@ import logging
 import docker
 from docker.errors import DockerException, APIError
 from typing import Optional, Dict, Any
+from backend.core.config import settings
 
 logger = logging.getLogger(__name__)
 
@@ -15,22 +16,36 @@ class DockerService:
 
     def __init__(self):
         """Initialize Docker client"""
+        self._enabled = settings.DOCKER_ENABLED
+        self._availability_checked = False
+
+        if not self._enabled:
+            logger.info("Docker features disabled (DOCKER_ENABLED=false)")
+            self.client = None
+            return
+
         try:
             self.client = docker.from_env()
             logger.info("✅ Docker client initialized successfully")
         except DockerException as e:
-            logger.error(f"❌ Failed to initialize Docker client: {e}")
+            logger.warning(f"Docker client unavailable: {e}")
             self.client = None
 
     def is_available(self) -> bool:
         """Check if Docker is available and connected"""
+        if not self._enabled:
+            return False
+
         if self.client is None:
             return False
         try:
             self.client.ping()
+            self._availability_checked = True
             return True
         except Exception as e:
-            logger.error(f"Docker connection check failed: {e}")
+            if not self._availability_checked:
+                logger.warning(f"Docker connection check failed: {e}")
+                self._availability_checked = True
             return False
 
     def create_storage_container(
