@@ -1,6 +1,6 @@
 from fastapi import APIRouter
 from datetime import datetime
-from core.database import get_db
+from backend.core.database import get_db
 
 router = APIRouter()
 

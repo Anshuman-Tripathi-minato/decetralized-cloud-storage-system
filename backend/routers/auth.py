@@ -5,9 +5,9 @@ Provides JWT issuance for RSA-based user identity and admin login.
 from fastapi import APIRouter, HTTPException, status, Depends
 from pydantic import BaseModel
 from datetime import datetime
-from core.security import create_access_token, get_current_user
-from core.config import settings
-from core.database import get_db
+from backend.core.security import create_access_token, get_current_user
+from backend.core.config import settings
+from backend.core.database import get_db
 from passlib.context import CryptContext
 
 router = APIRouter()
@@ -104,7 +104,7 @@ async def login_node(req: NodeLoginRequest):
         raise HTTPException(status_code=401, detail="Invalid identity credentials")
 
     # Verify the signature
-    from utils.crypto import verify_rsa_signature
+    from backend.utils.crypto import verify_rsa_signature
     is_valid = verify_rsa_signature(
         user.get("public_key"),
         req.signature,

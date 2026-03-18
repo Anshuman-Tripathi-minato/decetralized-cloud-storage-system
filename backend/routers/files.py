@@ -3,8 +3,8 @@ from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form
 from pydantic import BaseModel
 from typing import Optional
 from datetime import datetime
-from core.security import get_current_user
-from core.database import get_db
+from backend.core.security import get_current_user
+from backend.core.database import get_db
 import base64
 
 router = APIRouter()

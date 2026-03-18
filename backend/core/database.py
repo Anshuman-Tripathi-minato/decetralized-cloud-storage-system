@@ -1,5 +1,5 @@
 from motor.motor_asyncio import AsyncIOMotorClient
-from core.config import settings
+from backend.core.config import settings
 import logging
 from datetime import datetime
 

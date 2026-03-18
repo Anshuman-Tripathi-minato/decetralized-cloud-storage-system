@@ -2,7 +2,7 @@ from datetime import datetime, timedelta
 from jose import JWTError, jwt
 from fastapi import Depends, HTTPException, status
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
-from core.config import settings
+from backend.core.config import settings
 from typing import Optional
 
 security = HTTPBearer(auto_error=False)

@@ -6,9 +6,9 @@ import logging
 from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from core.config import settings
-from core.database import connect_db, disconnect_db
-from services.docker_service import get_docker_service
+from backend.core.config import settings
+from backend.core.database import connect_db, disconnect_db
+from backend.services.docker_service import get_docker_service
 
 # Configure logging
 logging.basicConfig(
@@ -61,7 +61,7 @@ app.add_middleware(
 )
 
 # ── Routers (imported progressively per sprint) ───────────────────────
-from routers import health, auth, storage, files, admin, network, blockchain
+from backend.routers import health, auth, storage, files, admin, network, blockchain
 
 app.include_router(health.router,     prefix="/api",           tags=["Health"])
 app.include_router(auth.router,       prefix="/api/auth",      tags=["Authentication"])

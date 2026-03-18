@@ -2,9 +2,9 @@
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 from datetime import datetime
-from core.security import get_current_user
-from core.database import get_db
-from services.docker_service import get_docker_service
+from backend.core.security import get_current_user
+from backend.core.database import get_db
+from backend.services.docker_service import get_docker_service
 
 router = APIRouter()
 

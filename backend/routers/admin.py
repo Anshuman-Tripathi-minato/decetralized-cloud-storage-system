@@ -1,7 +1,7 @@
 """Admin Router — Sprint 5 stub."""
 from fastapi import APIRouter, Depends
-from core.security import get_current_admin
-from core.database import get_db
+from backend.core.security import get_current_admin
+from backend.core.database import get_db
 from datetime import datetime
 
 router = APIRouter()

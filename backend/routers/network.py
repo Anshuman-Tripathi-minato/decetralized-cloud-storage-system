@@ -1,7 +1,7 @@
 """Network Router — P2P peer data from database."""
 from datetime import datetime
 from fastapi import APIRouter
-from core.database import get_db
+from backend.core.database import get_db
 
 router = APIRouter()
 
