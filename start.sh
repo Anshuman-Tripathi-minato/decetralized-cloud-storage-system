@@ -3,10 +3,24 @@
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
+find_venv_python() {
+  local venv_dir="$1"
+  local candidate
+
+  for candidate in "$venv_dir/bin/python" "$venv_dir/bin/python3" "$venv_dir/bin/python"*; do
+    if [ -x "$candidate" ] && [ -f "$candidate" ]; then
+      echo "$candidate"
+      return 0
+    fi
+  done
+
+  return 1
+}
+
 find_python() {
   local candidate
 
-  for candidate in python3 python; do
+  for candidate in python3 python python3.13 python3.12 python3.11 python3.10 python3.9 python3.8; do
     if command -v "$candidate" >/dev/null 2>&1; then
       command -v "$candidate"
       return 0
@@ -40,7 +54,9 @@ echo "📡 Starting Backend (FastAPI)..."
 cd "$SCRIPT_DIR/backend"
 VENV_DIR="$SCRIPT_DIR/.venv"
 
-if [ ! -x "$VENV_DIR/bin/python" ] && [ ! -x "$VENV_DIR/bin/python3" ]; then
+VENV_PYTHON="$(find_venv_python "$VENV_DIR" || true)"
+
+if [ -z "$VENV_PYTHON" ]; then
   echo "   ⚠️  Virtual environment is missing a Python binary. Recreating .venv..."
   SYS_PYTHON="$(find_python || true)"
   if [ -z "$SYS_PYTHON" ]; then
@@ -52,13 +68,11 @@ if [ ! -x "$VENV_DIR/bin/python" ] && [ ! -x "$VENV_DIR/bin/python3" ]; then
     echo "   ❌ Failed to recreate virtual environment at $VENV_DIR"
     exit 1
   }
+  VENV_PYTHON="$(find_venv_python "$VENV_DIR" || true)"
 fi
 
 source "$VENV_DIR/bin/activate"
-PYTHON_BIN="$VENV_DIR/bin/python"
-if [ ! -x "$PYTHON_BIN" ] && [ -x "$VENV_DIR/bin/python3" ]; then
-  PYTHON_BIN="$VENV_DIR/bin/python3"
-fi
+PYTHON_BIN="$VENV_PYTHON"
 if [ ! -x "$PYTHON_BIN" ]; then
   PYTHON_BIN="$(find_python || true)"
 fi
