@@ -1,0 +1,27 @@
+# Python
+.venv/
+__pycache__/
+**/__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# Node
+node_modules/
+frontend/node_modules/
+
+# Environment and secrets
+.env
+backend/.env
+
+# IDE/editor
+.vscode/
+
+# Logs and runtime files
+*.log
+*.pid
+
+# Build outputs
+dist/
+build/
+coverage/
