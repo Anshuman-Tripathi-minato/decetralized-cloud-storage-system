@@ -3,6 +3,27 @@
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
+find_python() {
+  local candidate
+
+  for candidate in python3 python; do
+    if command -v "$candidate" >/dev/null 2>&1; then
+      command -v "$candidate"
+      return 0
+    fi
+  done
+
+  # Some slim deployment images expose only versioned python3 binaries.
+  for candidate in /usr/bin/python3* /usr/local/bin/python3*; do
+    if [ -x "$candidate" ] && [ -f "$candidate" ]; then
+      echo "$candidate"
+      return 0
+    fi
+  done
+
+  return 1
+}
+
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 echo "🚀 DecentraStore — Starting All Services"
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
@@ -21,7 +42,7 @@ VENV_DIR="$SCRIPT_DIR/.venv"
 
 if [ ! -x "$VENV_DIR/bin/python" ] && [ ! -x "$VENV_DIR/bin/python3" ]; then
   echo "   ⚠️  Virtual environment is missing a Python binary. Recreating .venv..."
-  SYS_PYTHON="$(command -v python3 || command -v python)"
+  SYS_PYTHON="$(find_python || true)"
   if [ -z "$SYS_PYTHON" ]; then
     echo "   ❌ No system Python found to rebuild virtual environment."
     exit 1
@@ -39,7 +60,7 @@ if [ ! -x "$PYTHON_BIN" ] && [ -x "$VENV_DIR/bin/python3" ]; then
   PYTHON_BIN="$VENV_DIR/bin/python3"
 fi
 if [ ! -x "$PYTHON_BIN" ]; then
-  PYTHON_BIN="$(command -v python || command -v python3)"
+  PYTHON_BIN="$(find_python || true)"
 fi
 if [ -z "$PYTHON_BIN" ]; then
   echo "   ❌ No Python interpreter found in the active environment."
