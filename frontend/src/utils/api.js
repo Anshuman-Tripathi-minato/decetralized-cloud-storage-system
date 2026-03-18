@@ -2,7 +2,8 @@
  * API Client for DecentraStore Backend
  */
 
-const API_BASE = '/api';
+const API_ROOT = (import.meta.env.VITE_API_URL || '').replace(/\/$/, '');
+const API_BASE = `${API_ROOT}/api`;
 
 /**
  * Make an API request
