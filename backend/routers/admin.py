@@ -12,9 +12,17 @@ async def network_stats(admin: dict = Depends(get_current_admin)):
     db = get_db()
     total_nodes = total_files = total_chunks = 0
     total_storage_bytes = 0
+    active_nodes = 0
+    avg_latency = 0
+    uptime = 0
+    regions = 0
+    failed_requests = 0
+    throughput = 0
+    last_block = 0
     
     if db:
         total_nodes = await db.users.count_documents({})
+        active_nodes = await db.users.count_documents({"is_active": True})
         total_files = await db.files.count_documents({})
         total_chunks = await db.chunks.count_documents({})
         
@@ -25,26 +33,49 @@ async def network_stats(admin: dict = Depends(get_current_admin)):
         async for doc in db.files.aggregate(pipeline):
             total_storage_bytes = doc.get("total_size", 0)
 
-    # Simulate realistic network metrics
-    storage_tb = total_storage_bytes / (1024 ** 4) if total_storage_bytes > 0 else 12.5
-    storage_capacity = 20.0  # 20 PB total capacity
-    storage_utilization = round((storage_tb / (storage_capacity * 1024)) * 100, 1)
+        latency_pipeline = [
+            {"$match": {"avg_latency_ms": {"$exists": True}}},
+            {"$group": {"_id": None, "avg_latency": {"$avg": "$avg_latency_ms"}}}
+        ]
+        async for doc in db.users.aggregate(latency_pipeline):
+            avg_latency = round(doc.get("avg_latency", 0) or 0)
+
+        regions = len(await db.users.distinct("region", {"region": {"$nin": [None, ""]}}))
+        failed_requests = await db.api_errors.count_documents({}) if "api_errors" in await db.list_collection_names() else 0
+        throughput = await db.chunks.count_documents({"uploaded_at": {"$gte": datetime.utcnow().replace(hour=0, minute=0, second=0, microsecond=0)}})
+
+        latest_log = await db.blockchain_logs.find_one(
+            {},
+            sort=[("block_number", -1)]
+        )
+        if latest_log:
+            last_block = latest_log.get("block_number") or latest_log.get("block_height") or 0
+
+    pledged_storage_bytes = 0
+    if db:
+        pledge_pipeline = [{"$group": {"_id": None, "total_pledged": {"$sum": "$storage_pledged"}}}]
+        async for doc in db.users.aggregate(pledge_pipeline):
+            pledged_storage_bytes = doc.get("total_pledged", 0)
+
+    storage_utilization = round((total_storage_bytes / pledged_storage_bytes) * 100, 1) if pledged_storage_bytes > 0 else 0
+    uptime = round((active_nodes / total_nodes) * 100, 2) if total_nodes > 0 else 0
+    network_health = "Healthy" if active_nodes > 0 else "No Data"
     
     return {
         "total_nodes": total_nodes,
-        "active_nodes": max(total_nodes, 847),
+        "active_nodes": active_nodes,
         "total_files": total_files,
         "total_chunks": total_chunks,
-        "total_storage": int(storage_tb * (1024 ** 4)),  # bytes
+        "total_storage": total_storage_bytes,
         "storage_utilization": storage_utilization,
-        "network_health": "Excellent",
-        "uptime": 99.9,
-        "active_peers": max(total_nodes, 847),
-        "avg_latency": 45,
-        "throughput": 125,
-        "failed_requests": 3,
-        "regions": 12,
-        "last_block": 14829 + total_files,
+        "network_health": network_health,
+        "uptime": uptime,
+        "active_peers": active_nodes,
+        "avg_latency": avg_latency,
+        "throughput": throughput,
+        "failed_requests": failed_requests,
+        "regions": regions,
+        "last_block": last_block,
         "timestamp": datetime.utcnow().isoformat(),
     }
 

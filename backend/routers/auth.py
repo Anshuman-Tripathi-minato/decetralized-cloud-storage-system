@@ -74,7 +74,7 @@ async def register_node(req: NodeRegisterRequest):
         "is_active": True,
         "registered_at": datetime.utcnow(),
         "last_seen": datetime.utcnow(),
-        "uptime_score": 100.0,
+        "uptime_score": 0.0,
     }
 
     await db.users.insert_one(user_doc)
@@ -164,7 +164,7 @@ async def get_me(current_user: dict = Depends(get_current_user)):
 # ── Helper ────────────────────────────────────────────────────────────
 
 async def _log_blockchain_event(db, event_type: str, node_id: str, metadata: dict):
-    """Write a simulated Hyperledger Fabric event to MongoDB."""
+    """Write a blockchain event to MongoDB."""
     import hashlib, json, uuid
     tx_data = {
         "event_type": event_type,
@@ -174,12 +174,14 @@ async def _log_blockchain_event(db, event_type: str, node_id: str, metadata: dic
         "nonce": str(uuid.uuid4()),
     }
     tx_hash = hashlib.sha256(json.dumps(tx_data, sort_keys=True).encode()).hexdigest()
+    next_block = await db.blockchain_logs.count_documents({}) + 1
     await db.blockchain_logs.insert_one({
         "tx_hash": tx_hash,
         "event_type": event_type,
         "node_id": node_id,
         "metadata": metadata,
-        "block_number": await db.blockchain_logs.count_documents({}) + 14829,
+        "block_number": next_block,
+        "block_height": next_block,
         "channel": "decentrastore-channel",
         "chaincode": "storage-contract",
         "timestamp": datetime.utcnow(),

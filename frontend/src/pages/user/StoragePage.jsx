@@ -1,15 +1,10 @@
 import { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
-import { HardDrive, Zap, TrendingUp, CheckCircle2, AlertCircle, Loader2, Award, Server, Activity } from 'lucide-react';
+import { HardDrive, Zap, CheckCircle2, AlertCircle, Loader2, Award, Server, Activity } from 'lucide-react';
 import { useTheme } from '../../context/ThemeContext';
-import { useAuth } from '../../context/AuthContext';
 import { getStorageStatus, pledgeStorage, getContainerStatus } from '../../utils/api';
-import { formatBytes } from '../../utils/fileEncryption';
 
 export default function StoragePage() {
   const { isDark } = useTheme();
-  const { user } = useAuth();
-  const navigate = useNavigate();
 
   const [storageGB, setStorageGB] = useState(10);
   const [currentPledge, setCurrentPledge] = useState(0);
@@ -324,39 +319,6 @@ export default function StoragePage() {
               </>
             )}
           </button>
-        </div>
-
-        {/* Stats */}
-        <div className="grid grid-cols-3 gap-6">
-          <div className={`rounded-2xl p-6 ${isDark ? 'glass' : 'glass-light shadow'}`}>
-            <div className="flex items-center gap-3 mb-2">
-              <TrendingUp size={18} className="text-green-400" />
-              <p className={`text-xs font-medium ${isDark ? 'text-white/40' : 'text-gray-500'}`}>
-                ROI
-              </p>
-            </div>
-            <p className="text-2xl font-black">15% APY</p>
-          </div>
-          
-          <div className={`rounded-2xl p-6 ${isDark ? 'glass' : 'glass-light shadow'}`}>
-            <div className="flex items-center gap-3 mb-2">
-              <HardDrive size={18} className="text-blue-400" />
-              <p className={`text-xs font-medium ${isDark ? 'text-white/40' : 'text-gray-500'}`}>
-                Network Storage
-              </p>
-            </div>
-            <p className="text-2xl font-black">2.4 PB</p>
-          </div>
-          
-          <div className={`rounded-2xl p-6 ${isDark ? 'glass' : 'glass-light shadow'}`}>
-            <div className="flex items-center gap-3 mb-2">
-              <Award size={18} className="text-yellow-400" />
-              <p className={`text-xs font-medium ${isDark ? 'text-white/40' : 'text-gray-500'}`}>
-                Your Rank
-              </p>
-            </div>
-            <p className="text-2xl font-black">#127</p>
-          </div>
         </div>
 
       </div>

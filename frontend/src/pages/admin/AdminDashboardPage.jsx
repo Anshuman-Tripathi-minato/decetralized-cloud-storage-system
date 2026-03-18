@@ -1,16 +1,17 @@
 import { useState, useEffect } from 'react';
 import { 
   Activity, Database, Users, HardDrive, TrendingUp, Server, 
-  Zap, Globe, Shield, AlertCircle, CheckCircle2, Loader2 
+  Zap, Globe, Shield, AlertCircle, CheckCircle2
 } from 'lucide-react';
 import { useTheme } from '../../context/ThemeContext';
-import { getAdminStats, getBlockchainLogs, getPeers } from '../../utils/api';
+import { getAdminStats, getBlockchainLogs, getPeers, getNetworkMetrics } from '../../utils/api';
 
 export default function AdminDashboardPage() {
   const { isDark } = useTheme();
   const [stats, setStats] = useState(null);
   const [events, setEvents] = useState([]);
   const [peers, setPeers] = useState([]);
+  const [performanceHistory, setPerformanceHistory] = useState([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -21,15 +22,17 @@ export default function AdminDashboardPage() {
 
   const loadDashboardData = async () => {
     try {
-      const [adminStats, blockchainEvents, peerData] = await Promise.all([
+      const [adminStats, blockchainEvents, peerData, networkData] = await Promise.all([
         getAdminStats().catch(() => ({ total_nodes: 0, total_files: 0, total_storage: 0, network_health: 'Unknown', uptime: 0, active_peers: 0, avg_latency: 0, throughput: 0, failed_requests: 0, regions: 0 })),
-        getBlockchainLogs(5).catch(() => ({ events: [] })),
-        getPeers(100).catch(() => ({ peers: [] }))
+        getBlockchainLogs(5).catch(() => ({ logs: [] })),
+        getPeers(100).catch(() => ({ peers: [] })),
+        getNetworkMetrics().catch(() => ({ data: [] }))
       ]);
       
       setStats(adminStats);
-      setEvents(blockchainEvents.events || []);
+      setEvents(blockchainEvents.logs || []);
       setPeers(peerData.peers || []);
+      setPerformanceHistory(Array.isArray(networkData?.data) ? networkData.data : []);
     } catch (err) {
       console.error('Failed to load admin dashboard:', err);
     } finally {
@@ -59,8 +62,6 @@ export default function AdminDashboardPage() {
       icon: Users,
       label: 'Total Nodes',
       value: stats?.total_nodes || 0,
-      change: '+12',
-      changeLabel: 'this week',
       color: 'text-blue-400',
       bgColor: isDark ? 'bg-blue-500/10' : 'bg-blue-50',
     },
@@ -68,8 +69,6 @@ export default function AdminDashboardPage() {
       icon: Database,
       label: 'Stored Files',
       value: stats?.total_files || 0,
-      change: '+48',
-      changeLabel: 'this week',
       color: 'text-purple-400',
       bgColor: isDark ? 'bg-purple-500/10' : 'bg-purple-50',
     },
@@ -84,18 +83,18 @@ export default function AdminDashboardPage() {
     {
       icon: Zap,
       label: 'Network Health',
-      value: stats?.network_health || 'Excellent',
-      subtitle: `${stats?.uptime || 99.9}% uptime`,
+      value: stats?.network_health || 'Unknown',
+      subtitle: `${stats?.uptime || 0}% uptime`,
       color: 'text-yellow-400',
       bgColor: isDark ? 'bg-yellow-500/10' : 'bg-yellow-50',
     },
   ];
 
   const systemMetrics = [
-    { label: 'Active Peers', value: stats?.active_peers || 0, status: 'healthy' },
-    { label: 'Avg Latency', value: `${stats?.avg_latency || 0}ms`, status: 'healthy' },
-    { label: 'Throughput', value: `${stats?.throughput || 0} MB/s`, status: 'healthy' },
-    { label: 'Failed Requests', value: stats?.failed_requests || 0, status: (stats?.failed_requests || 0) > 10 ? 'warning' : 'healthy' },
+    { label: 'Active Peers', value: stats?.active_peers || 0, status: (stats?.active_peers || 0) > 0 ? 'healthy' : 'warning' },
+    { label: 'Avg Latency', value: `${stats?.avg_latency || 0}ms`, status: (stats?.avg_latency || 0) > 0 ? 'healthy' : 'warning' },
+    { label: 'Throughput', value: `${stats?.throughput || 0} chunks/day`, status: (stats?.throughput || 0) > 0 ? 'healthy' : 'warning' },
+    { label: 'Failed Requests', value: stats?.failed_requests || 0, status: (stats?.failed_requests || 0) > 0 ? 'warning' : 'healthy' },
   ];
 
   const recentEvents = (events || []).map(event => ({
@@ -107,8 +106,10 @@ export default function AdminDashboardPage() {
 
   // Show empty state if no events
   const displayEvents = recentEvents.length > 0 ? recentEvents : [
-    { type: 'info', description: 'No recent network events', time: 'Waiting for activity...', status: 'success' }
+    { type: 'info', description: 'No recent network events', time: 'Waiting for activity...', status: 'info' }
   ];
+
+  const isOperational = (stats?.network_health || '').toLowerCase() === 'healthy';
 
   return (
     <div className="p-8">
@@ -126,8 +127,10 @@ export default function AdminDashboardPage() {
           </div>
           <div className="flex items-center gap-3">
             <div className="flex items-center gap-2">
-              <div className="w-2 h-2 rounded-full bg-green-400 animate-pulse" />
-              <span className="text-sm font-medium text-green-400">All Systems Operational</span>
+              <div className={`w-2 h-2 rounded-full ${isOperational ? 'bg-green-400 animate-pulse' : 'bg-yellow-400'}`} />
+              <span className={`text-sm font-medium ${isOperational ? 'text-green-400' : 'text-yellow-400'}`}>
+                {isOperational ? 'System Healthy' : 'Awaiting Live Metrics'}
+              </span>
             </div>
           </div>
         </div>
@@ -147,7 +150,7 @@ export default function AdminDashboardPage() {
                 <div>
                   <h2 className="text-2xl font-bold">DecentraStore Network</h2>
                   <p className={`text-sm ${isDark ? 'text-white/60' : 'text-gray-500'}`}>
-                    Distributed across {stats?.regions || 12} regions worldwide
+                    Distributed across {stats?.regions || 0} regions worldwide
                   </p>
                 </div>
               </div>
@@ -252,6 +255,8 @@ export default function AdminDashboardPage() {
                   <span className={`text-xs px-3 py-1 rounded-full ${
                     event.status === 'success' 
                       ? isDark ? 'bg-green-500/20 text-green-400' : 'bg-green-100 text-green-600'
+                      : event.status === 'info'
+                      ? isDark ? 'bg-blue-500/20 text-blue-400' : 'bg-blue-100 text-blue-600'
                       : isDark ? 'bg-yellow-500/20 text-yellow-400' : 'bg-yellow-100 text-yellow-600'
                   }`}>
                     {event.status}
@@ -270,84 +275,21 @@ export default function AdminDashboardPage() {
               <h3 className="text-xl font-bold">System Status</h3>
             </div>
 
-            <div className="space-y-4">
-              <div>
-                <div className="flex justify-between items-center mb-2">
-                  <span className={`text-xs ${isDark ? 'text-white/60' : 'text-gray-600'}`}>
-                    API Server
-                  </span>
-                  <span className="text-xs text-green-400 font-semibold">Healthy</span>
-                </div>
-                <div className={`h-2 rounded-full overflow-hidden ${isDark ? 'bg-white/10' : 'bg-gray-200'}`}>
-                  <div className="h-full bg-green-400" style={{ width: '100%' }} />
-                </div>
-              </div>
-
-              <div>
-                <div className="flex justify-between items-center mb-2">
-                  <span className={`text-xs ${isDark ? 'text-white/60' : 'text-gray-600'}`}>
-                    Database
-                  </span>
-                  <span className="text-xs text-green-400 font-semibold">Healthy</span>
-                </div>
-                <div className={`h-2 rounded-full overflow-hidden ${isDark ? 'bg-white/10' : 'bg-gray-200'}`}>
-                  <div className="h-full bg-green-400" style={{ width: '98%' }} />
-                </div>
-              </div>
-
-              <div>
-                <div className="flex justify-between items-center mb-2">
-                  <span className={`text-xs ${isDark ? 'text-white/60' : 'text-gray-600'}`}>
-                    P2P Network
-                  </span>
-                  <span className="text-xs text-green-400 font-semibold">Healthy</span>
-                </div>
-                <div className={`h-2 rounded-full overflow-hidden ${isDark ? 'bg-white/10' : 'bg-gray-200'}`}>
-                  <div className="h-full bg-green-400" style={{ width: '95%' }} />
-                </div>
-              </div>
-
-              <div>
-                <div className="flex justify-between items-center mb-2">
-                  <span className={`text-xs ${isDark ? 'text-white/60' : 'text-gray-600'}`}>
-                    Blockchain Sync
-                  </span>
-                  <span className="text-xs text-yellow-400 font-semibold">Syncing</span>
-                </div>
-                <div className={`h-2 rounded-full overflow-hidden ${isDark ? 'bg-white/10' : 'bg-gray-200'}`}>
-                  <div className="h-full bg-yellow-400" style={{ width: '87%' }} />
-                </div>
-              </div>
-
-              <div>
-                <div className="flex justify-between items-center mb-2">
-                  <span className={`text-xs ${isDark ? 'text-white/60' : 'text-gray-600'}`}>
-                    Storage Capacity
-                  </span>
-                  <span className="text-xs text-blue-400 font-semibold">62%</span>
-                </div>
-                <div className={`h-2 rounded-full overflow-hidden ${isDark ? 'bg-white/10' : 'bg-gray-200'}`}>
-                  <div className="h-full bg-blue-400" style={{ width: '62%' }} />
-                </div>
-              </div>
-            </div>
-
-            {/* Quick Stats */}
-            <div className={`mt-6 p-4 rounded-xl ${
+            <div className={`p-4 rounded-xl ${
               isDark ? 'bg-white/5 border border-white/10' : 'bg-gray-50 border border-gray-200'
             }`}>
               <div className="space-y-2 text-xs">
                 <div className="flex justify-between">
-                  <span className={isDark ? 'text-white/60' : 'text-gray-600'}>CPU Usage</span>
-                  <span className="font-mono">23%</span>
+                  <span className={isDark ? 'text-white/60' : 'text-gray-600'}>Active Peers</span>
+                  <span className="font-mono">{stats?.active_peers || 0}</span>
                 </div>
                 <div className="flex justify-between">
-                  <span className={isDark ? 'text-white/60' : 'text-gray-600'}>Memory</span>
-                  <span className="font-mono">4.2 / 16 GB</span>
+                  <span className={isDark ? 'text-white/60' : 'text-gray-600'}>Avg Latency</span>
+                  <span className="font-mono">{stats?.avg_latency || 0}ms</span>
                 </div>
                 <div className="flex justify-between">
-                  <span className={isDark ? 'text-white/60' : 'text-gray-600'}>Disk I/O</span>
-                  <span className="font-mono">145 MB/s</span>
+                  <span className={isDark ? 'text-white/60' : 'text-gray-600'}>Last Block</span>
+                  <span className="font-mono">#{stats?.last_block || 0}</span>
                 </div>
               </div>
             </div>
@@ -355,37 +297,17 @@ export default function AdminDashboardPage() {
 
         </div>
 
-        {/* Performance Charts Placeholder */}
-        <div className="grid grid-cols-2 gap-6">
-          <div className={`rounded-3xl p-6 ${isDark ? 'glass' : 'glass-light shadow-xl'}`}>
-            <h3 className="text-lg font-bold mb-4">Network Traffic (24h)</h3>
-            <div className={`h-48 rounded-xl flex items-end justify-center gap-2 p-4 ${
-              isDark ? 'bg-white/5' : 'bg-gray-50'
-            }`}>
-              {[45, 62, 58, 71, 85, 78, 92, 88, 95, 87, 90, 96].map((height, idx) => (
-                <div
-                  key={idx}
-                  className="flex-1 bg-gradient-to-t from-indigo-500 to-purple-500 rounded-t"
-                  style={{ height: `${height}%` }}
-                />
-              ))}
-            </div>
-          </div>
-
-          <div className={`rounded-3xl p-6 ${isDark ? 'glass' : 'glass-light shadow-xl'}`}>
-            <h3 className="text-lg font-bold mb-4">Storage Growth (30d)</h3>
-            <div className={`h-48 rounded-xl flex items-end justify-center gap-2 p-4 ${
-              isDark ? 'bg-white/5' : 'bg-gray-50'
-            }`}>
-              {[30, 35, 40, 42, 48, 52, 58, 65, 70, 75, 82, 88].map((height, idx) => (
-                <div
-                  key={idx}
-                  className="flex-1 bg-gradient-to-t from-green-500 to-blue-500 rounded-t"
-                  style={{ height: `${height}%` }}
-                />
-              ))}
-            </div>
-          </div>
+        <div className={`rounded-3xl p-6 ${isDark ? 'glass' : 'glass-light shadow-xl'}`}>
+          <h3 className="text-lg font-bold mb-4">Performance History</h3>
+          {performanceHistory.length > 0 ? (
+            <p className={`text-sm ${isDark ? 'text-white/60' : 'text-gray-600'}`}>
+              {performanceHistory.length} historical data points available from network metrics.
+            </p>
+          ) : (
+            <p className={`text-sm ${isDark ? 'text-white/50' : 'text-gray-500'}`}>
+              No historical performance data available yet.
+            </p>
+          )}
         </div>
 
       </div>

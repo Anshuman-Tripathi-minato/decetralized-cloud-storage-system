@@ -31,8 +31,7 @@ async def health_check():
         "network": {
             "registered_nodes": node_count,
             "stored_files": file_count,
-            "simulated_peers": 847,
-            "protocol": "Hyperledger Fabric v2.5 (simulated)",
+            "protocol": "DecentraStore",
         },
     }
 

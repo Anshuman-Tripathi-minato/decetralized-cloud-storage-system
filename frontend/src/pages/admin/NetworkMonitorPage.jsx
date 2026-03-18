@@ -36,13 +36,15 @@ export default function NetworkMonitorPage() {
     activeFilter === 'all' || p.status === activeFilter
   );
 
+  const regionCount = new Set(peers.map((peer) => peer.region).filter(Boolean)).size;
+
   const networkOverview = peers.length > 0 ? {
     total_peers: peers.length,
     online_peers: peers.filter(p => p.status === 'online').length,
     offline_peers: peers.filter(p => p.status === 'offline').length,
     avg_latency: Math.round(peers.reduce((acc, p) => acc + (p.latency_ms || 0), 0) / (peers.length || 1)),
     total_storage: peers.reduce((acc, p) => acc + (p.storage_pledged_gb || 0), 0),
-    active_connections: peers.filter(p => p.status === 'online').length * 3,
+    active_connections: peers.filter(p => p.status === 'online').length,
   } : {
     total_peers: 0,
     online_peers: 0,
@@ -103,7 +105,7 @@ export default function NetworkMonitorPage() {
               <div>
                 <h2 className="text-2xl font-bold">P2P Network Topology</h2>
                 <p className={`text-sm ${isDark ? 'text-white/60' : 'text-gray-500'}`}>
-                  {networkOverview.total_peers} registered peers across 6 regions
+                  {networkOverview.total_peers} registered peers across {regionCount} regions
                 </p>
               </div>
             </div>
@@ -166,7 +168,7 @@ export default function NetworkMonitorPage() {
                     Regions
                   </p>
                 </div>
-                <p className="text-2xl font-black">6</p>
+                <p className="text-2xl font-black">{regionCount}</p>
               </div>
             </div>
           </div>

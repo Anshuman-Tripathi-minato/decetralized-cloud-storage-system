@@ -129,7 +129,7 @@ export default function LandingPage() {
             : 'border-indigo-200 bg-indigo-50 text-indigo-600'
           }`}>
           <span className="w-1.5 h-1.5 rounded-full status-online" />
-          Network Live · {peersCount} Peers Connected
+          {peersCount > 0 ? `Connected Peers · ${peersCount}` : 'No peers connected yet'}
           <ChevronRight size={12} />
         </div>
 

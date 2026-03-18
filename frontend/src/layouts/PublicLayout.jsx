@@ -127,7 +127,7 @@ export default function PublicLayout() {
             <div className="flex items-center gap-2 mt-0.5">
               <span className="w-1.5 h-1.5 rounded-full status-online" />
               <span className={`text-[11px] ${isDark ? 'text-white/40' : 'text-gray-400'}`}>
-                847 active peers · Block #14,829
+                Live metrics available in dashboard
               </span>
             </div>
           </div>

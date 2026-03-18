@@ -30,3 +30,6 @@ test_auth.sh
 dist/
 build/
 coverage/
+
+# Docker compose local file
+docker-compose.yml

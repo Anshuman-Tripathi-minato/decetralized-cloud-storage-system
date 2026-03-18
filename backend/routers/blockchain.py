@@ -1,4 +1,4 @@
-"""Blockchain Logs Router — Simulated Hyperledger Fabric audit trail."""
+"""Blockchain Logs Router — audit trail endpoints."""
 from fastapi import APIRouter, Depends, Query
 from core.security import get_current_admin
 from core.database import get_db
@@ -54,6 +54,10 @@ async def blockchain_stats(admin: dict = Depends(get_current_admin)):
     db = get_db()
     total_tx = 0
     events: dict = {}
+    latest_block = 0
+    channel = "unknown"
+    chaincode_version = "unknown"
+    consensus = "unknown"
 
     if db:
         total_tx = await db.blockchain_logs.count_documents({})
@@ -61,11 +65,18 @@ async def blockchain_stats(admin: dict = Depends(get_current_admin)):
         async for doc in db.blockchain_logs.aggregate(pipeline):
             events[doc["_id"]] = doc["count"]
 
+        latest_log = await db.blockchain_logs.find_one({}, sort=[("block_number", -1)])
+        if latest_log:
+            latest_block = latest_log.get("block_number") or latest_log.get("block_height") or 0
+            channel = latest_log.get("channel", "unknown")
+            chaincode_version = latest_log.get("chaincode_version") or latest_log.get("chaincode") or "unknown"
+            consensus = latest_log.get("consensus", "unknown")
+
     return {
         "total_transactions": total_tx,
-        "latest_block": 14829 + total_tx,
-        "channel": "decentrastore-channel",
-        "chaincode_version": "v1.0.0",
-        "consensus": "RAFT",
+        "latest_block": latest_block,
+        "channel": channel,
+        "chaincode_version": chaincode_version,
+        "consensus": consensus,
         "event_breakdown": events,
     }

@@ -252,26 +252,26 @@ export default function ProtocolSettingsPage() {
               <div className="space-y-2 text-sm">
                 <div className="flex justify-between">
                   <span className={isDark ? 'text-white/60' : 'text-gray-600'}>
-                    100 GB pledge for 1 day:
+                    {settings.min_storage_pledge_gb} GB pledge for 1 day:
                   </span>
                   <span className="font-bold text-yellow-400">
-                    {(100 * settings.token_mint_rate * 1).toFixed(2)} AST
+                    {(settings.min_storage_pledge_gb * settings.token_mint_rate * 1).toFixed(2)} AST
                   </span>
                 </div>
                 <div className="flex justify-between">
                   <span className={isDark ? 'text-white/60' : 'text-gray-600'}>
-                    100 GB pledge for 30 days:
+                    {settings.min_storage_pledge_gb} GB pledge for 30 days:
                   </span>
                   <span className="font-bold text-yellow-400">
-                    {(100 * settings.token_mint_rate * 30).toFixed(2)} AST
+                    {(settings.min_storage_pledge_gb * settings.token_mint_rate * 30).toFixed(2)} AST
                   </span>
                 </div>
                 <div className="flex justify-between">
                   <span className={isDark ? 'text-white/60' : 'text-gray-600'}>
-                    1000 GB pledge for 30 days:
+                    {settings.max_storage_pledge_gb} GB pledge for 30 days:
                   </span>
                   <span className="font-bold text-yellow-400">
-                    {(1000 * settings.token_mint_rate * 30).toFixed(2)} AST
+                    {(settings.max_storage_pledge_gb * settings.token_mint_rate * 30).toFixed(2)} AST
                   </span>
                 </div>
               </div>

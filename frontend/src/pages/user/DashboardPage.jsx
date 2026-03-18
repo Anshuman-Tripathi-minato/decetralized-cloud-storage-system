@@ -6,7 +6,7 @@ import {
 } from 'lucide-react';
 import { useTheme } from '../../context/ThemeContext';
 import { useAuth } from '../../context/AuthContext';
-import { getStorageStatus, getMe } from '../../utils/api';
+import { getStorageStatus, getMe, getPeers, getNetworkMetrics } from '../../utils/api';
 import { formatBytes } from '../../utils/fileEncryption';
 
 export default function DashboardPage() {
@@ -18,6 +18,7 @@ export default function DashboardPage() {
   const [userInfo, setUserInfo] = useState(null);
   const [loading, setLoading] = useState(true);
   const [recentActivity, setRecentActivity] = useState([]); // Real activity from API
+  const [networkStats, setNetworkStats] = useState({ activeNodes: 0, totalStorage: 0, health: 'Unknown' });
 
   useEffect(() => {
     loadDashboardData();
@@ -26,12 +27,21 @@ export default function DashboardPage() {
   const loadDashboardData = async () => {
     try {
       setLoading(true);
-      const [storageData, userData] = await Promise.all([
+      const [storageData, userData, peersData, metricsData] = await Promise.all([
         getStorageStatus(),
-        getMe()
+        getMe(),
+        getPeers(1000).catch(() => ({ peers: [] })),
+        getNetworkMetrics().catch(() => ({ total_storage: 0, active_nodes: 0 })),
       ]);
       setStats(storageData);
       setUserInfo(userData);
+      const activeNodes = peersData?.online_peers ?? peersData?.peers?.filter((peer) => peer.status === 'online').length ?? 0;
+      const totalStorage = metricsData?.total_storage || 0;
+      setNetworkStats({
+        activeNodes,
+        totalStorage,
+        health: activeNodes > 0 ? 'Healthy' : 'No Data',
+      });
     } catch (err) {
       console.error('Failed to load dashboard:', err);
     } finally {
@@ -61,7 +71,6 @@ export default function DashboardPage() {
       icon: Coins,
       label: 'AST Balance',
       value: `${userInfo?.token_balance?.toFixed(2) || '0.00'} AST`,
-      change: '+12.5%',
       color: 'text-yellow-400',
       bgColor: isDark ? 'bg-yellow-500/10' : 'bg-yellow-50',
     },
@@ -179,7 +188,7 @@ export default function DashboardPage() {
               </button>
             </div>
             <div className="space-y-4">
-              {recentActivity.map((activity, idx) => (
+              {recentActivity.length > 0 ? recentActivity.map((activity, idx) => (
                 <div
                   key={idx}
                   className={`p-4 rounded-xl flex items-center justify-between ${
@@ -213,7 +222,11 @@ export default function DashboardPage() {
                   </div>
                   <span className="text-sm font-bold text-green-400">{activity.earned}</span>
                 </div>
-              ))}
+              )) : (
+                <div className={`p-6 rounded-xl text-sm ${isDark ? 'bg-white/5 text-white/60' : 'bg-gray-50 text-gray-500'}`}>
+                  No recent activity yet.
+                </div>
+              )}
             </div>
           </div>
 
@@ -291,15 +304,17 @@ export default function DashboardPage() {
               <div className="space-y-2 text-xs">
                 <div className="flex justify-between">
                   <span className={isDark ? 'text-white/60' : 'text-gray-600'}>Active Nodes</span>
-                  <span className="font-mono">847</span>
+                  <span className="font-mono">{networkStats.activeNodes}</span>
                 </div>
                 <div className="flex justify-between">
                   <span className={isDark ? 'text-white/60' : 'text-gray-600'}>Total Storage</span>
-                  <span className="font-mono">2.4 PB</span>
+                  <span className="font-mono">{formatBytes(networkStats.totalStorage)}</span>
                 </div>
                 <div className="flex justify-between">
                   <span className={isDark ? 'text-white/60' : 'text-gray-600'}>Network Health</span>
-                  <span className="text-green-400 font-semibold">Excellent</span>
+                  <span className={`${networkStats.health === 'Healthy' ? 'text-green-400' : 'text-yellow-400'} font-semibold`}>
+                    {networkStats.health}
+                  </span>
                 </div>
               </div>
             </div>

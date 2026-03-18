@@ -85,7 +85,7 @@ export default function WalletPage() {
                   <span className="text-2xl font-bold opacity-60">AST</span>
                 </div>
                 <p className={`text-xs mt-2 ${isDark ? 'text-white/40' : 'text-gray-400'}`}>
-                  ≈ ${(balance * 1.5).toFixed(2)} USD
+                  Real-time market conversion unavailable
                 </p>
               </div>
               <div className={`w-16 h-16 rounded-2xl flex items-center justify-center ${
@@ -235,7 +235,7 @@ export default function WalletPage() {
                 <div>
                   <p className="font-semibold">Pledge Storage</p>
                   <p className={`text-xs ${isDark ? 'text-white/40' : 'text-gray-500'}`}>
-                    0.5 AST per GB per day
+                    Earn rewards based on protocol settings
                   </p>
                 </div>
               </div>
@@ -257,7 +257,7 @@ export default function WalletPage() {
                 <div>
                   <p className="font-semibold">Upload Files</p>
                   <p className={`text-xs ${isDark ? 'text-white/40' : 'text-gray-500'}`}>
-                    0.1-1.0 AST per file
+                    Earn rewards when network incentives apply
                   </p>
                 </div>
               </div>

@@ -157,7 +157,7 @@ export default function AdminLayout() {
               <div className="flex items-center gap-1.5">
                 <Activity size={10} className="text-purple-400" />
                 <span className={`text-[11px] ${isDark ? 'text-white/40' : 'text-gray-400'}`}>
-                  847 nodes · 2.4 TB stored
+                  Live metrics available in dashboard
                 </span>
               </div>
             </div>

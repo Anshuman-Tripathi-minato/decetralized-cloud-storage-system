@@ -83,15 +83,19 @@ export default function BlockchainLogsPage() {
               Blockchain <span className="gradient-text">Logs</span>
             </h1>
             <p className={`text-sm ${isDark ? 'text-white/60' : 'text-gray-500'}`}>
-              Simulated Hyperledger Fabric transaction audit trail
+              Immutable transaction audit trail
             </p>
           </div>
           <div className={`px-4 py-2 rounded-xl ${
-            isDark ? 'bg-green-500/20 border border-green-500/30' : 'bg-green-50 border border-green-200'
+            logs.length > 0
+              ? isDark ? 'bg-green-500/20 border border-green-500/30' : 'bg-green-50 border border-green-200'
+              : isDark ? 'bg-yellow-500/20 border border-yellow-500/30' : 'bg-yellow-50 border border-yellow-200'
           }`}>
             <div className="flex items-center gap-2">
-              <CheckCircle2 size={16} className="text-green-400" />
-              <span className="text-sm font-semibold text-green-400">Ledger Synced</span>
+              <CheckCircle2 size={16} className={logs.length > 0 ? 'text-green-400' : 'text-yellow-400'} />
+              <span className={`text-sm font-semibold ${logs.length > 0 ? 'text-green-400' : 'text-yellow-400'}`}>
+                {logs.length > 0 ? 'Ledger Active' : 'No Transactions Yet'}
+              </span>
             </div>
           </div>
         </div>
@@ -240,8 +244,10 @@ export default function BlockchainLogsPage() {
                       </td>
                       <td className="p-4">
                         <div className="flex items-center gap-2">
-                          <CheckCircle2 size={14} className="text-green-400" />
-                          <span className="text-xs text-green-400 font-semibold">Confirmed</span>
+                          <CheckCircle2 size={14} className={(log.status || 'unknown').toLowerCase() === 'valid' ? 'text-green-400' : 'text-yellow-400'} />
+                          <span className={`text-xs font-semibold ${(log.status || 'unknown').toLowerCase() === 'valid' ? 'text-green-400' : 'text-yellow-400'}`}>
+                            {log.status || 'Unknown'}
+                          </span>
                         </div>
                       </td>
                       <td className="p-4">
