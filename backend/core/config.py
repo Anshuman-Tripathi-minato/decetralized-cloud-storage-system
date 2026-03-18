@@ -1,13 +1,23 @@
-from pydantic_settings import BaseSettings
+import os
+from pydantic_settings import BaseSettings, SettingsConfigDict
 from typing import List
 from pydantic import Field, AliasChoices
 
 
+def _first_non_empty_env(*keys: str, default: str) -> str:
+    """Return the first non-empty environment variable among keys."""
+    for key in keys:
+        value = os.getenv(key)
+        if value and value.strip():
+            # Handle values pasted with wrapping quotes in dashboard UIs.
+            return value.strip().strip('"').strip("'")
+    return default
+
+
 class Settings(BaseSettings):
-    MONGO_URI: str = Field(
-        default="mongodb://localhost:27017",
-        validation_alias=AliasChoices("MONGO_URI", "MONGODB_URI", "MONGO_URL", "DATABASE_URL"),
-    )
+    MONGO_URI: str = Field(default_factory=lambda: _first_non_empty_env(
+        "MONGO_URI", "MONGODB_URI", "MONGO_URL", "DATABASE_URL", default="mongodb://localhost:27017"
+    ))
     DB_NAME: str = Field(
         default="decentrastore",
         validation_alias=AliasChoices("DB_NAME", "MONGO_DB_NAME", "MONGODB_DB"),
@@ -27,9 +37,11 @@ class Settings(BaseSettings):
     def cors_origins_list(self) -> List[str]:
         return [o.strip() for o in self.CORS_ORIGINS.split(",")]
 
-    class Config:
-        env_file = (".env", "backend/.env")
-        env_file_encoding = "utf-8"
+    model_config = SettingsConfigDict(
+        env_file=(".env", "backend/.env"),
+        env_file_encoding="utf-8",
+        extra="ignore",
+    )
 
 
 settings = Settings()
