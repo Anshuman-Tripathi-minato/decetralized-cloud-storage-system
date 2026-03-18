@@ -94,7 +94,12 @@ class InMemoryDatabase:
 async def connect_db():
     global client, db
     try:
-        client = AsyncIOMotorClient(settings.MONGO_URI, serverSelectionTimeoutMS=5000)
+        client = AsyncIOMotorClient(
+            settings.MONGO_URI,
+            serverSelectionTimeoutMS=5000,
+            socketTimeoutMS=5000,
+            connectTimeoutMS=5000
+        )
         # Test connection
         await client.admin.command("ping")
         db = client[settings.DB_NAME]

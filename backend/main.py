@@ -31,8 +31,6 @@ async def lifespan(app: FastAPI):
         logger.info("✅ Docker service initialized")
         containers = docker_service.list_storage_containers()
         logger.info(f"📦 Found {len(containers)} existing storage containers")
-    else:
-        logger.warning("⚠️  Docker daemon not available - container features disabled")
     
     logger.info("✅ System ready")
     yield
