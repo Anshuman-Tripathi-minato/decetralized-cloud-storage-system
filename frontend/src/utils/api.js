@@ -2,7 +2,13 @@
  * API Client for DecentraStore Backend
  */
 
-const API_ROOT = (import.meta.env.VITE_API_URL || '').replace(/\/$/, '');
+const RAW_API_ROOT = (import.meta.env.VITE_API_URL || '').replace(/\/$/, '');
+
+// Some deployments used an alternate hostname spelling; normalize to the active backend host.
+const API_ROOT = RAW_API_ROOT.replace(
+  'decentralized-cloud-storage-system-production.up.railway.app',
+  'decetralized-cloud-storage-system-production.up.railway.app'
+);
 const API_BASE = `${API_ROOT}/api`;
 
 /**
