@@ -52,12 +52,15 @@ app = FastAPI(
 origins = [
     "https://decentralized-cloud-storage-system-h74ncn6hu.vercel.app",
     "https://decentralized-cloud-storage-system.vercel.app",
+    "https://decetralized-cloud-storage-system-h74ncn6hu.vercel.app",
+    "https://decetralized-cloud-storage-system.vercel.app",
     "http://localhost:5173",
 ]
 
 app.add_middleware(
     CORSMiddleware,
     allow_origins=origins,
+    allow_origin_regex=r"https://.*\.vercel\.app",
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
