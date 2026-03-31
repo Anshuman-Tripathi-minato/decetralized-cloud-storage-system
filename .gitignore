@@ -33,3 +33,4 @@ coverage/
 
 # Docker compose local file
 docker-compose.yml
+__pycache__/
