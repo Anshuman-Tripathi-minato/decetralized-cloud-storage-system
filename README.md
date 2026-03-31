@@ -5,7 +5,7 @@ A decentralized cloud storage prototype with:
 - client-side AES-256-GCM file encryption
 - chunked file upload and retrieval
 - storage pledging with AST token rewards
-- Docker-backed per-node storage containers
+- provider-agent Docker containers on provider machines
 - admin observability for nodes, files, network, and blockchain logs
 
 ## Current Status
@@ -13,7 +13,9 @@ A decentralized cloud storage prototype with:
 All core sprint features are implemented in the current codebase:
 - user register/login with keystore-based RSA signature auth
 - admin login with JWT auth
-- user storage pledge flow with folder selection and Docker mount path
+- user storage pledge flow with provider agent URL + provider folder path
+- remote container provisioning on provider machines (not backend host)
+- chunk replication to provider nodes through provider-agent API
 - per-file storage node mapping (node IDs and IPs)
 - admin storage distribution view with search/filter
 - user dashboard distribution summary (nodes storing user data)
@@ -39,16 +41,17 @@ All core sprint features are implemented in the current codebase:
 
 ## Prerequisites
 
-- Linux or macOS (Linux tested)
+- Linux, macOS, or Windows
 - Python 3.10+ (3.13 tested)
 - Node.js 18+ and npm
-- Docker Engine (required for storage container features)
+- Docker Engine / Docker Desktop on each provider machine
 - Optional: MongoDB (if unavailable, backend falls back to in-memory mode)
 
 ## Project Structure
 
 - `backend/` FastAPI API, auth, storage, files, admin, network, blockchain
 - `frontend/` React portal (user + admin)
+- `provider_agent/` FastAPI node agent to provision provider-side Docker containers and write chunks
 - `start.sh` one-command startup for backend and frontend
 
 ## Quick Start (Recommended)
@@ -73,6 +76,26 @@ This script will:
 - Backend API: `http://localhost:8000/api`
 - Swagger Docs: `http://localhost:8000/api/docs`
 
+## Provider Agent (Required For Real Provider Storage)
+
+Run provider agent on each storage provider machine (Node B, Node C, ...):
+
+```bash
+cd '/home/minato/Desktop/decetralized cloud storage system'
+source .venv/bin/activate
+uvicorn provider_agent.agent:app --host 0.0.0.0 --port 8765
+```
+
+Important:
+- Use `--host 0.0.0.0` for reachable agent from backend/other nodes.
+- `--host 127.0.0.1` only allows local-loopback access.
+
+Background mode example:
+
+```bash
+cd '/home/minato/Desktop/decetralized cloud storage system' && source .venv/bin/activate && nohup uvicorn provider_agent.agent:app --host 0.0.0.0 --port 8765 > /tmp/decentrastore-provider-agent.log 2>&1 & echo $!
+```
+
 ## Environment Configuration
 
 ### Backend
@@ -91,7 +114,7 @@ ADMIN_PASSWORD=DecentraAdmin@2026
 ```
 
 Notes:
-- `DOCKER_ENABLED=true` is required to create pledged storage containers.
+- `DOCKER_ENABLED=true` is required for legacy local Docker mode.
 - If Docker host env is misconfigured, backend tries common Linux unix socket fallbacks automatically.
 
 ### Frontend
@@ -118,15 +141,16 @@ Default dev credentials:
 - username: `admin`
 - password: `DecentraAdmin@2026`
 
-## Storage Pledge and Docker Container Flow
+## Storage Pledge and Provider Container Flow
 
 Storage page now enforces full flow:
 1. user grants storage access in browser
-2. user enters absolute Docker host folder path
-3. user pledges storage in GB
-4. backend creates/recreates per-node Docker container
-5. selected host folder is bind-mounted into container
-6. quota is applied based on total pledged GB (hard quota when storage driver supports it)
+2. user enters provider node agent URL (example: `http://192.168.1.25:8765`)
+3. user enters provider machine absolute storage path
+4. user pledges storage in GB
+5. backend calls provider agent on provider machine
+6. provider machine creates/recreates Docker container with bind mount
+7. quota is applied based on total pledged GB (hard quota when storage driver supports it)
 
 ### Storage APIs
 - `GET /api/storage/status`
@@ -136,7 +160,8 @@ Storage page now enforces full flow:
 
 Important behavior:
 - pledge fails if absolute host path is missing
-- pledge fails if Docker container cannot be created
+- pledge fails if provider agent URL is missing/unreachable
+- pledge fails if provider-side container cannot be created
 - response includes mount source/type and quota enforcement state
 
 ## File Upload and Distribution
@@ -153,6 +178,7 @@ Important behavior:
 Current behavior:
 - file metadata stores storage node mapping (`node_id`, `ip_address`, `region`, `is_active`)
 - chunk records include replica metadata
+- encrypted chunks are pushed to provider agent endpoints for provider-side storage
 - fallback hydration for old records without `storage_nodes`
 
 ## Admin Observability
@@ -200,8 +226,14 @@ Admin dashboard includes:
 
 ### 4) Docker container creation fails
 - confirm Docker daemon is running
-- ensure `DOCKER_ENABLED=true`
-- verify host path is absolute and writable
+- ensure provider agent is running on provider machine and reachable
+- verify provider agent URL in storage page is correct
+- verify provider machine host path is absolute and writable
+
+### 5) Storage page says `Please provide provider agent URL`
+- run provider agent first on provider machine (port `8765`)
+- use reachable URL in UI (example `http://<provider-ip>:8765`)
+- for same machine local testing, use `http://localhost:8765`
 
 ## Logs and Service Management
 
