@@ -1,393 +1,235 @@
-# 🛠️ DecentraStore — Decentralized Cloud Storage System
+# DecentraStore
 
-**ALL 5 SPRINTS COMPLETE ✅**
+A decentralized cloud storage prototype with:
+- RSA keypair-based user identity
+- client-side AES-256-GCM file encryption
+- chunked file upload and retrieval
+- storage pledging with AST token rewards
+- Docker-backed per-node storage containers
+- admin observability for nodes, files, network, and blockchain logs
 
-A fully functional prototype of a decentralized, peer-to-peer cloud storage system with:
-- 🔐 RSA-2048 identity & signature-based authentication
-- 🔒 AES-256-GCM client-side encryption with chunked storage
-- 💾 MongoDB persistence layer
-- 💰 AST token economy with storage pledging rewards
-- 📊 Complete admin observability dashboard
+## Current Status
 
-Built with React 18, FastAPI, MongoDB, Web Crypto API, and Tailwind CSS.
+All core sprint features are implemented in the current codebase:
+- user register/login with keystore-based RSA signature auth
+- admin login with JWT auth
+- user storage pledge flow with folder selection and Docker mount path
+- per-file storage node mapping (node IDs and IPs)
+- admin storage distribution view with search/filter
+- user dashboard distribution summary (nodes storing user data)
+- notification bell popovers in both user and admin layouts
+- resilient local startup script with health-check retries
 
----
+## Tech Stack
 
-## 📋 Project Structure
+### Backend
+- FastAPI 0.115.6
+- Uvicorn 0.34.0
+- Motor 3.7.0 / PyMongo 4.10.1
+- python-jose 3.3.0
+- Docker SDK for Python 7.1.0
+- requests-unixsocket 0.4.1
 
-```
-decetralized cloud storage system/
-├── frontend/                      # React + Vite + Tailwind + Lucide
-│   ├── src/
-│   │   ├── App.jsx              # Main router with dual-portal layout
-│   │   ├── main.jsx             # Entry point
-│   │   ├── index.css            # Global glassmorphism styles
-│   │   ├── context/
-│   │   │   ├── ThemeContext.jsx # Light/Dark mode (localStorage)
-│   │   │   └── AuthContext.jsx  # User & Admin auth state
-│   │   ├── layouts/
-│   │   │   ├── PublicLayout.jsx # /app/* sidebar + topbar
-│   │   │   └── AdminLayout.jsx  # /admin/* sidebar + topbar
-│   │   ├── pages/
-│   │   │   └── LandingPage.jsx  # Hero, features, stats (Page 1)
-│   │   ├── components/
-│   │   │   ├── shared/
-│   │   │   │   ├── ThemeToggle.jsx
-│   │   │   │   └── PlaceholderPage.jsx
-│   │   │   ├── user/            # User portal components (Sprint 2+)
-│   │   │   └── admin/           # Admin portal components (Sprint 5+)
-│   │   ├── hooks/               # Custom React hooks
-│   │   ├── utils/               # Crypto, API, helpers
-│   │   └── assets/              # Images, icons
-│   ├── index.html               # HTML entry with Inter font
-│   ├── package.json
-│   ├── vite.config.js           # Vite + Tailwind config
-│   └── tailwind.config.js       # Tailwind (generated)
-│
-├── backend/                       # FastAPI + MongoDB
-│   ├── main.py                  # App factory, lifespan, CORS
-│   ├── core/
-│   │   ├── config.py            # Settings from .env
-│   │   ├── database.py          # MongoDB motor client
-│   │   └── security.py          # JWT creation & verification
-│   ├── routers/
-│   │   ├── health.py            # GET /api/health
-│   │   ├── auth.py              # Register, login, JWT issuance
-│   │   ├── storage.py           # Storage node management (Sprint 3)
-│   │   ├── files.py             # Upload/retrieve (Sprint 4)
-│   │   ├── admin.py             # Admin endpoints (Sprint 5)
-│   │   ├── network.py           # P2P peer simulation
-│   │   └── blockchain.py        # Hyperledger audit logs
-│   ├── models/                  # Pydantic schemas (TBD)
-│   ├── services/                # Business logic (TBD)
-│   ├── utils/                   # Crypto utilities (TBD)
-│   ├── requirements.txt
-│   ├── .env                     # Config (MongoDB URI, JWT secret, etc.)
-│   ├── run.sh                   # Startup script
-│   └── README.md                # Backend docs
-│
-└── ui major project.pdf          # Design spec (reference)
-```
+### Frontend
+- React 19.2.0
+- React Router DOM 7.13.0
+- Vite 7.3.1
+- Tailwind CSS 4.2.0
+- Lucide React 0.575.0
 
----
+## Prerequisites
 
-## 🚀 Quick Start
+- Linux or macOS (Linux tested)
+- Python 3.10+ (3.13 tested)
+- Node.js 18+ and npm
+- Docker Engine (required for storage container features)
+- Optional: MongoDB (if unavailable, backend falls back to in-memory mode)
 
-### Prerequisites
-- **Node.js** 18+ (npm)
-- **Python** 3.13+ (or via pyenv)
-- **MongoDB** 5.0+ (local or cloud) — optional for Sprint 1
+## Project Structure
 
-### 1️⃣ Start the Backend (FastAPI)
+- `backend/` FastAPI API, auth, storage, files, admin, network, blockchain
+- `frontend/` React portal (user + admin)
+- `start.sh` one-command startup for backend and frontend
+
+## Quick Start (Recommended)
+
+From repo root:
 
 ```bash
-cd backend
-# Install dependencies (one time)
-/home/minato/.pyenv/versions/3.13.0/bin/pip install -r requirements.txt
-
-# Run the server
-/home/minato/.pyenv/versions/3.13.0/bin/python -m uvicorn main:app --reload --port 8000
+./start.sh
 ```
 
-**Output:**
-```
-✅ 🚀 DecentraStore Orchestrator starting...
-   ➜ API:  http://localhost:8000/api
-   ➜ Docs: http://localhost:8000/api/docs
-```
+This script will:
+1. bootstrap/use `/.venv`
+2. install missing backend deps
+3. start backend on `http://localhost:8000`
+4. install missing frontend deps
+5. start frontend on `http://localhost:5173`
+6. wait until both are healthy
 
-Test the health endpoint:
-```bash
-curl http://localhost:8000/api/health
-```
+### URLs
 
----
+- Frontend: `http://localhost:5173`
+- Backend API: `http://localhost:8000/api`
+- Swagger Docs: `http://localhost:8000/api/docs`
 
-### 2️⃣ Start the Frontend (React/Vite)
+## Environment Configuration
 
-In a **new terminal**:
+### Backend
 
-```bash
-cd frontend
-# Install dependencies (one time)
-npm install
+Set values in `backend/.env` (or root `.env`):
 
-# Run the dev server
-npm run dev
-```
-
-**Output:**
-```
-  VITE v7.3.1  ready in 306 ms
-
-  ➜  Local:   http://localhost:5173/
-  ➜  Network: use --host to expose
-```
-
-Open your browser to **http://localhost:5173/**
-
----
-
-## 🎨 UI/UX Features (Sprint 1)
-
-### ✅ Implemented
-- **Global Light/Dark Theme** — Toggle saved to localStorage
-- **Glassmorphism Design** — Soft gradients (#4A65F6 → #8A4DFF), backdrop blur
-- **Landing Page (Page 1)** — Hero, 4 feature cards, network stats, CTA buttons
-- **Public Portal Layout** — Sidebar nav, user badge, topbar with AST balance
-- **Admin Portal Layout** — Sidebar nav, admin badge, topbar with system health
-- **Route Guards** — `RequireAuth` and `RequireAdmin` wrappers
-- **Placeholder Pages** — All Sprint 2–5 routes show coming-soon cards
-
-### Color Palette
-- **Primary:** `#4A65F6` (Indigo)
-- **Secondary:** `#8A4DFF` (Purple)
-- **Accent:** `#06D6A0` (Teal)
-- **Danger:** `#FF4D6D` (Red)
-- **Warning:** `#FFD166` (Gold)
-
----
-
-## 🔐 Backend Features (Sprint 1)
-
-### ✅ Implemented
-
-#### Health Check
-- `GET /api/health` — System status, DB connection, peer count
-
-#### Authentication Stubs (Full impl in Sprint 2)
-- `POST /api/auth/register` — Node registration with RSA public key
-- `POST /api/auth/login` — Node authentication by signature
-- `POST /api/auth/admin/login` — Admin login (username/password)
-
-#### Network Simulation (Ready for Sprint 5)
-- `GET /api/network/peers` — 20 random peer nodes
-- `GET /api/network/topology` — Network graph nodes & edges
-- `GET /api/network/metrics/history` — 24-hour simulated metrics
-
-#### Blockchain Simulation (Ready for Sprint 5)
-- `GET /api/blockchain/logs` — Hyperledger Fabric transaction history
-- `GET /api/blockchain/logs/{tx_hash}` — Single transaction details
-- `GET /api/blockchain/stats` — Chain stats & event breakdown
-
-#### Admin Endpoints (Ready for Sprint 5)
-- `GET /api/admin/stats` — Network-wide statistics
-- `GET /api/admin/nodes` — Registered node registry
-- `PATCH /api/admin/nodes/{node_id}/ban` — Ban a node
-- `GET /api/admin/protocol` — Protocol configuration
-- `PATCH /api/admin/protocol` — Update protocol settings
-
-#### Storage & Files (Stubs for Sprints 3–4)
-- `GET /api/storage/status` — Node storage pledge status
-- `POST /api/storage/pledge` — Allocate storage contribution
-- `POST /api/files/upload` — Placeholder for file upload
-- `GET /api/files/retrieve/{cid}` — Placeholder for file retrieval
-- `GET /api/files/list` — List user's uploaded files
-
----
-
-### Database Schema (MongoDB)
-
-Collections will be created with indexes on startup:
-
-```javascript
-// Users (nodes)
-{
-  _id: ObjectId,
-  node_id: String (unique),
-  public_key: String,
-  public_key_fingerprint: String (unique),
-  keystore_encrypted: String,
-  token_balance: Number,
-  storage_pledged_gb: Number,
-  storage_used_gb: Number,
-  is_active: Boolean,
-  registered_at: ISODate,
-  last_seen: ISODate,
-  uptime_score: Number
-}
-
-// Files
-{
-  _id: ObjectId,
-  cid: String (unique),
-  owner_node_id: String,
-  original_name: String,
-  original_size: Number,
-  encryption_key_hash: String,
-  created_at: ISODate,
-  chunk_count: Number
-}
-
-// Chunks
-{
-  _id: ObjectId,
-  chunk_id: String (unique),
-  cid: String,
-  data_encrypted: Binary,
-  replica_peers: [String],
-  created_at: ISODate
-}
-
-// Blockchain Logs
-{
-  _id: ObjectId,
-  tx_hash: String (unique),
-  event_type: String,
-  node_id: String,
-  block_number: Number,
-  channel: String,
-  chaincode: String,
-  timestamp: ISODate,
-  status: String
-}
-
-// Token Transactions
-{
-  _id: ObjectId,
-  node_id: String,
-  amount: Number,
-  tx_type: String,
-  timestamp: ISODate,
-  description: String
-}
-```
-
----
-
-## 📁 Environment Configuration
-
-### Backend `.env`
 ```env
 MONGO_URI=mongodb://localhost:27017
 DB_NAME=decentrastore
-JWT_SECRET=decentrastore_jwt_secret_change_in_production_2026
+DOCKER_ENABLED=true
+JWT_SECRET=decentrastore_jwt_secret_change_in_production
 JWT_ALGORITHM=HS256
 JWT_EXPIRE_MINUTES=1440
 ADMIN_USERNAME=admin
 ADMIN_PASSWORD=DecentraAdmin@2026
-CORS_ORIGINS=http://localhost:5173,http://127.0.0.1:5173
 ```
 
-### Frontend Proxy
-Configured in `vite.config.js`:
-```javascript
-proxy: {
-  '/api': {
-    target: 'http://localhost:8000',
-    changeOrigin: true,
-  },
-},
+Notes:
+- `DOCKER_ENABLED=true` is required to create pledged storage containers.
+- If Docker host env is misconfigured, backend tries common Linux unix socket fallbacks automatically.
+
+### Frontend
+
+Set `frontend/.env`:
+
+```env
+VITE_API_URL=http://localhost:8000
 ```
 
----
+If omitted, frontend auto-uses localhost API when running on localhost.
 
-## 📚 Sprint Roadmap
+## Authentication Flows
 
-| Sprint | Focus | Status |
-|--------|-------|--------|
-| **Sprint 1** | 🛠️ Foundation & Routing | ✅ **COMPLETE** |
-| **Sprint 2** | 🔐 Identity & Authentication | ⏳ Next |
-| **Sprint 3** | 💾 Storage Node & Tokenomics | ⏳ TBD |
-| **Sprint 4** | 🚀 Upload & Retrieve Engine | ⏳ TBD |
-| **Sprint 5** | 🏢 Admin Observability | ⏳ TBD |
+### User Auth
+- Register: `POST /api/auth/register`
+- Login: `POST /api/auth/login` (RSA signature challenge)
+- Profile: `GET /api/auth/me`
 
----
+### Admin Auth
+- Login: `POST /api/auth/admin/login`
 
-## 🔗 Useful Links
+Default dev credentials:
+- username: `admin`
+- password: `DecentraAdmin@2026`
 
-- **Frontend:** http://localhost:5173/
-  - Landing: `/`
-  - Public Auth: `/app/login`, `/app/register`
-  - Public Portal: `/app/dashboard`, `/app/upload`, `/app/retrieve`, `/app/storage`, `/app/wallet`
-  - Admin Auth: `/admin/login`
-  - Admin Portal: `/admin/dashboard`, `/admin/network`, `/admin/blockchain`, `/admin/settings`, `/admin/nodes`
+## Storage Pledge and Docker Container Flow
 
-- **Backend:**
-  - API: http://localhost:8000/api
-  - Docs (Swagger): http://localhost:8000/api/docs
-  - ReDoc: http://localhost:8000/api/redoc
-  - Health: http://localhost:8000/api/health
+Storage page now enforces full flow:
+1. user grants storage access in browser
+2. user enters absolute Docker host folder path
+3. user pledges storage in GB
+4. backend creates/recreates per-node Docker container
+5. selected host folder is bind-mounted into container
+6. quota is applied based on total pledged GB (hard quota when storage driver supports it)
 
----
+### Storage APIs
+- `GET /api/storage/status`
+- `POST /api/storage/pledge`
+- `GET /api/storage/container/status`
+- `GET /api/storage/containers/list`
 
-## 🛡️ Security Notes
+Important behavior:
+- pledge fails if absolute host path is missing
+- pledge fails if Docker container cannot be created
+- response includes mount source/type and quota enforcement state
 
-- **Client-side encryption:** AES-256 (via crypto-js) — implemented in Sprint 4
-- **Identity:** RSA-2048 keypair (locally generated) — implemented in Sprint 2
-- **JWTs:** HS256 with 24h expiry — live in `/api/auth`
-- **CORS:** Restricted to localhost (configurable in `.env`)
-- **MongoDB:** Connection via Motor async driver (no blocking I/O)
+## File Upload and Distribution
 
----
+### File APIs
+- `POST /api/files/upload`
+- `POST /api/files/chunks/upload`
+- `GET /api/files/list`
+- `GET /api/files/distribution/summary`
+- `GET /api/files/{cid}`
+- `GET /api/files/{cid}/chunks`
+- `DELETE /api/files/{cid}`
 
-## 🎯 Sprint Completion Status
+Current behavior:
+- file metadata stores storage node mapping (`node_id`, `ip_address`, `region`, `is_active`)
+- chunk records include replica metadata
+- fallback hydration for old records without `storage_nodes`
 
-### ✅ Sprint 1 — Foundation & Routing (COMPLETE)
-- Vite React app with Tailwind CSS
-- Dual-portal layouts (PublicLayout /app/\*, AdminLayout /admin/\*)
-- ThemeContext, AuthContext
-- LandingPage with glassmorphism design
-- FastAPI backend with MongoDB, router stubs, health endpoint
+## Admin Observability
 
-### ✅ Sprint 2 — Identity & Authentication (COMPLETE)
-- RSA-2048 keypair generation with Web Crypto API
-- Signature-based authentication (challenge-response)
-- RegisterPage (5-step flow with keystore download)
-- LoginPage (3-step challenge signing)
-- AdminLoginPage with bcrypt password hashing
-- JWT token system (HS256, 24-hour expiry)
+### Admin APIs
+- `GET /api/admin/stats`
+- `GET /api/admin/nodes`
+- `GET /api/admin/storage-distribution`
+- `PATCH /api/admin/nodes/{node_id}/ban`
+- `GET /api/admin/protocol`
+- `PATCH /api/admin/protocol`
 
-### ✅ Sprint 3 — File Upload & Encryption (COMPLETE)
-- AES-256-GCM client-side encryption
-- File chunking (256KB chunks)
-- CID generation (SHA-256 hash)
-- UploadPage (4-step: select → encrypt → upload → complete)
-- FilesPage (browse, download/decrypt, delete)
-- Backend chunk upload/retrieval endpoints
+Admin dashboard includes:
+- network/system summary metrics
+- storage distribution summary and per-file placement details
+- search/filter by CID, owner node, node ID, IP, active/inactive state
+- node registry with node IDs, IPs, files stored, chunks hosted, pledged storage
 
-### ✅ Sprint 4 — Storage & Tokenomics (COMPLETE)
-- DashboardPage with stats cards and activity feed
-- StoragePage with pledge slider and earnings calculator
-- WalletPage with transaction history
-- AST token rewards (0.5 AST/GB/day)
-- Backend storage pledge endpoint
-- /auth/me endpoint for user data
+## Network and Blockchain
 
-### ✅ Sprint 5 — Admin Dashboard & Observability (COMPLETE)
-- AdminDashboardPage with global network stats
-- NetworkMonitorPage with P2P peer table
-- BlockchainLogsPage with transaction audit trail
-- NodeRegistryPage with ban/unban functionality
-- ProtocolSettingsPage with configuration controls
-- Enhanced backend admin endpoints
+### Network APIs
+- `GET /api/network/peers`
+- `GET /api/network/topology`
+- `GET /api/network/metrics/history`
 
----
+### Blockchain APIs
+- `GET /api/blockchain/logs`
+- `GET /api/blockchain/logs/{tx_hash}`
+- `GET /api/blockchain/stats`
 
-## 📚 Documentation
+## Local Troubleshooting
 
-- **[QUICKSTART.md](./QUICKSTART.md)** — Installation and setup guide
-- **[SPRINT_5_SUMMARY.md](./SPRINT_5_SUMMARY.md)** — Complete Sprint 5 feature documentation
+### 1) Frontend shows `ERR_NAME_NOT_RESOLVED` or `Failed to fetch`
+- ensure `frontend/.env` has `VITE_API_URL=http://localhost:8000`
+- restart frontend after env changes
+- hard refresh browser
 
----
+### 2) Console shows CORS error with backend 500
+- check backend logs first; many "CORS" messages are secondary to server exceptions
+- inspect `/tmp/decentrastore-backend.log`
 
-## 🤝 Contributing
+### 3) User sees `User not found` after restart
+- in-memory DB mode does not persist users across restart
+- register/login again to create fresh session
 
-This is a prototype for a UI/UX Major Project. All code follows:
-- **Clean, minimal Web3 startup aesthetic**
-- **Glassmorphism design system**
-- **Responsive 1440px canvas grid**
-- **Light/Dark mode support**
-- **Zero external UI library dependencies** (except Lucide icons)
+### 4) Docker container creation fails
+- confirm Docker daemon is running
+- ensure `DOCKER_ENABLED=true`
+- verify host path is absolute and writable
 
----
+## Logs and Service Management
 
-## 📄 License
+Backend log:
 
-This project is part of a UI/UX Major Project (2026). All rights reserved.
+```bash
+tail -f /tmp/decentrastore-backend.log
+```
 
----
+Frontend log:
 
-**Last Updated:** February 19, 2026  
-**Project Status:** ✅ ALL 5 SPRINTS COMPLETE  
-**Next Steps:** See SPRINT_5_SUMMARY.md for future enhancement suggestions
+```bash
+tail -f /tmp/decentrastore-frontend.log
+```
+
+Stop services:
+
+```bash
+killall -9 python uvicorn node npm
+```
+
+## Security Notes
+
+- user files are encrypted client-side before upload
+- JWT protects user/admin endpoints
+- admin and user sessions are stored separately in localStorage
+- CORS is restricted to known local and deployed origins
+
+## License
+
+Prototype/research project for decentralized storage experimentation.

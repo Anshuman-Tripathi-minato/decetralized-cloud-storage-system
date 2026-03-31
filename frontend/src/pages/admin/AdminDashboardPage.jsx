@@ -1,10 +1,10 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { 
   Activity, Database, Users, HardDrive, TrendingUp, Server, 
   Zap, Globe, Shield, AlertCircle, CheckCircle2
 } from 'lucide-react';
 import { useTheme } from '../../context/ThemeContext';
-import { getAdminStats, getBlockchainLogs, getPeers, getNetworkMetrics } from '../../utils/api';
+import { getAdminStats, getBlockchainLogs, getPeers, getNetworkMetrics, getAdminStorageDistribution } from '../../utils/api';
 
 export default function AdminDashboardPage() {
   const { isDark } = useTheme();
@@ -12,7 +12,77 @@ export default function AdminDashboardPage() {
   const [events, setEvents] = useState([]);
   const [peers, setPeers] = useState([]);
   const [performanceHistory, setPerformanceHistory] = useState([]);
+  const [storageDistribution, setStorageDistribution] = useState({ summary: {}, files: [] });
+  const [distributionSearch, setDistributionSearch] = useState('');
+  const [distributionOwnerFilter, setDistributionOwnerFilter] = useState('all');
+  const [distributionStatusFilter, setDistributionStatusFilter] = useState('all');
   const [loading, setLoading] = useState(true);
+
+  const distributionFiles = Array.isArray(storageDistribution?.files) ? storageDistribution.files : [];
+
+  const ownerOptions = useMemo(() => {
+    const owners = new Set(
+      distributionFiles
+        .map((doc) => doc.owner_node_id)
+        .filter(Boolean)
+    );
+    return ['all', ...Array.from(owners)];
+  }, [distributionFiles]);
+
+  const filteredDistributionFiles = useMemo(() => {
+    const searchNeedle = distributionSearch.trim().toLowerCase();
+
+    return distributionFiles.filter((doc) => {
+      const storageNodes = Array.isArray(doc.storage_nodes) ? doc.storage_nodes : [];
+      const hasActiveNode = storageNodes.some((node) => node?.is_active);
+      const hasInactiveNode = storageNodes.some((node) => node && !node.is_active);
+
+      if (distributionOwnerFilter !== 'all' && doc.owner_node_id !== distributionOwnerFilter) {
+        return false;
+      }
+
+      if (distributionStatusFilter === 'active-only' && !hasActiveNode) {
+        return false;
+      }
+
+      if (distributionStatusFilter === 'inactive-only' && !hasInactiveNode) {
+        return false;
+      }
+
+      if (!searchNeedle) {
+        return true;
+      }
+
+      const flattenedNodeData = storageNodes
+        .map((node) => `${node?.node_id || ''} ${node?.ip_address || ''}`)
+        .join(' ')
+        .toLowerCase();
+
+      const searchable = `${
+        doc.filename || ''
+      } ${
+        doc.cid || ''
+      } ${
+        doc.owner_node_id || ''
+      } ${
+        doc.owner_user_identifier || ''
+      } ${flattenedNodeData}`.toLowerCase();
+
+      return searchable.includes(searchNeedle);
+    });
+  }, [distributionFiles, distributionSearch, distributionOwnerFilter, distributionStatusFilter]);
+
+  const filteredDistributionNodeCount = useMemo(() => {
+    const nodeIds = new Set();
+    filteredDistributionFiles.forEach((doc) => {
+      (doc.storage_nodes || []).forEach((node) => {
+        if (node?.node_id) {
+          nodeIds.add(node.node_id);
+        }
+      });
+    });
+    return nodeIds.size;
+  }, [filteredDistributionFiles]);
 
   useEffect(() => {
     loadDashboardData();
@@ -22,17 +92,19 @@ export default function AdminDashboardPage() {
 
   const loadDashboardData = async () => {
     try {
-      const [adminStats, blockchainEvents, peerData, networkData] = await Promise.all([
+      const [adminStats, blockchainEvents, peerData, networkData, distributionData] = await Promise.all([
         getAdminStats().catch(() => ({ total_nodes: 0, total_files: 0, total_storage: 0, network_health: 'Unknown', uptime: 0, active_peers: 0, avg_latency: 0, throughput: 0, failed_requests: 0, regions: 0 })),
         getBlockchainLogs(5).catch(() => ({ logs: [] })),
         getPeers(100).catch(() => ({ peers: [] })),
-        getNetworkMetrics().catch(() => ({ data: [] }))
+        getNetworkMetrics().catch(() => ({ data: [] })),
+        getAdminStorageDistribution(200).catch(() => ({ summary: {}, files: [] })),
       ]);
       
       setStats(adminStats);
       setEvents(blockchainEvents.logs || []);
       setPeers(peerData.peers || []);
       setPerformanceHistory(Array.isArray(networkData?.data) ? networkData.data : []);
+      setStorageDistribution(distributionData || { summary: {}, files: [] });
     } catch (err) {
       console.error('Failed to load admin dashboard:', err);
     } finally {
@@ -306,6 +378,117 @@ export default function AdminDashboardPage() {
           ) : (
             <p className={`text-sm ${isDark ? 'text-white/50' : 'text-gray-500'}`}>
               No historical performance data available yet.
+            </p>
+          )}
+        </div>
+
+        <div className={`rounded-3xl p-6 ${isDark ? 'glass' : 'glass-light shadow-xl'}`}>
+          <div className="flex items-center justify-between mb-4">
+            <h3 className="text-lg font-bold">File Storage Distribution (Node IDs + IPs)</h3>
+            <span className={`text-xs ${isDark ? 'text-white/60' : 'text-gray-500'}`}>
+              {filteredDistributionFiles.length} / {storageDistribution?.summary?.total_files || 0} files shown
+            </span>
+          </div>
+
+          <div className="grid grid-cols-1 lg:grid-cols-4 gap-3 mb-4">
+            <input
+              type="text"
+              value={distributionSearch}
+              onChange={(e) => setDistributionSearch(e.target.value)}
+              placeholder="Search by CID, user, node ID, or IP"
+              className={`lg:col-span-2 px-3 py-2 rounded-xl text-sm border outline-none ${
+                isDark
+                  ? 'bg-white/5 border-white/10 focus:border-indigo-400 text-white'
+                  : 'bg-white border-gray-200 focus:border-indigo-500 text-gray-900'
+              }`}
+            />
+            <select
+              value={distributionOwnerFilter}
+              onChange={(e) => setDistributionOwnerFilter(e.target.value)}
+              className={`px-3 py-2 rounded-xl text-sm border outline-none ${
+                isDark
+                  ? 'bg-white/5 border-white/10 focus:border-indigo-400 text-white'
+                  : 'bg-white border-gray-200 focus:border-indigo-500 text-gray-900'
+              }`}
+            >
+              {ownerOptions.map((ownerId) => (
+                <option key={ownerId} value={ownerId}>
+                  {ownerId === 'all' ? 'All Owner Nodes' : ownerId}
+                </option>
+              ))}
+            </select>
+            <select
+              value={distributionStatusFilter}
+              onChange={(e) => setDistributionStatusFilter(e.target.value)}
+              className={`px-3 py-2 rounded-xl text-sm border outline-none ${
+                isDark
+                  ? 'bg-white/5 border-white/10 focus:border-indigo-400 text-white'
+                  : 'bg-white border-gray-200 focus:border-indigo-500 text-gray-900'
+              }`}
+            >
+              <option value="all">All Node Status</option>
+              <option value="active-only">Files On Active Nodes</option>
+              <option value="inactive-only">Files With Inactive Nodes</option>
+            </select>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-4 gap-3 mb-5">
+            <div className={`p-3 rounded-xl ${isDark ? 'bg-white/5' : 'bg-gray-50'}`}>
+              <p className={`text-[11px] ${isDark ? 'text-white/50' : 'text-gray-500'}`}>Filtered Files</p>
+              <p className="text-lg font-black">{filteredDistributionFiles.length}</p>
+            </div>
+            <div className={`p-3 rounded-xl ${isDark ? 'bg-white/5' : 'bg-gray-50'}`}>
+              <p className={`text-[11px] ${isDark ? 'text-white/50' : 'text-gray-500'}`}>Owner Nodes</p>
+              <p className="text-lg font-black">{storageDistribution?.summary?.total_owner_nodes || 0}</p>
+            </div>
+            <div className={`p-3 rounded-xl ${isDark ? 'bg-white/5' : 'bg-gray-50'}`}>
+              <p className={`text-[11px] ${isDark ? 'text-white/50' : 'text-gray-500'}`}>Visible Storage Nodes</p>
+              <p className="text-lg font-black">{filteredDistributionNodeCount}</p>
+            </div>
+            <div className={`p-3 rounded-xl ${isDark ? 'bg-white/5' : 'bg-gray-50'}`}>
+              <p className={`text-[11px] ${isDark ? 'text-white/50' : 'text-gray-500'}`}>Active Storage Nodes</p>
+              <p className="text-lg font-black text-green-400">{storageDistribution?.summary?.active_storage_nodes || 0}</p>
+            </div>
+          </div>
+
+          {filteredDistributionFiles.length > 0 ? (
+            <div className="space-y-3 max-h-[420px] overflow-auto pr-1">
+              {filteredDistributionFiles.slice(0, 50).map((fileDoc) => (
+                <div
+                  key={fileDoc.cid}
+                  className={`p-4 rounded-xl ${isDark ? 'bg-white/5 border border-white/10' : 'bg-gray-50 border border-gray-200'}`}
+                >
+                  <div className="flex items-center justify-between gap-3 mb-2">
+                    <p className="text-sm font-semibold truncate">{fileDoc.filename || fileDoc.cid}</p>
+                    <span className={`text-xs font-mono ${isDark ? 'text-white/60' : 'text-gray-500'}`}>
+                      owner: {fileDoc.owner_node_id || 'N/A'}
+                    </span>
+                  </div>
+                  <p className={`text-[11px] mb-2 ${isDark ? 'text-white/50' : 'text-gray-500'}`}>
+                    CID: {fileDoc.cid} • user: {fileDoc.owner_user_identifier || 'N/A'} • replicas: {fileDoc.replica_count || 0} • chunks: {fileDoc.chunks_uploaded || 0}/{fileDoc.total_chunks || 0}
+                  </p>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+                    {(fileDoc.storage_nodes || []).map((node) => (
+                      <div
+                        key={`${fileDoc.cid}-${node.node_id}`}
+                        className={`px-3 py-2 rounded-lg text-xs flex items-center justify-between gap-2 ${
+                          isDark ? 'bg-black/20' : 'bg-white'
+                        }`}
+                      >
+                        <span className="font-mono truncate">{node.node_id || 'Unknown Node'}</span>
+                        <span className={isDark ? 'text-white/70' : 'text-gray-600'}>
+                          {node.ip_address || 'N/A'}
+                          {typeof node.is_active === 'boolean' ? ` • ${node.is_active ? 'active' : 'inactive'}` : ''}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <p className={`text-sm ${isDark ? 'text-white/50' : 'text-gray-500'}`}>
+              No files match the current filters.
             </p>
           )}
         </div>

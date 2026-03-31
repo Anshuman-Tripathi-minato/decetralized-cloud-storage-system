@@ -14,16 +14,113 @@ export default function StoragePage() {
   const [error, setError] = useState('');
   const [containerStatus, setContainerStatus] = useState(null);
   const [containerLoading, setContainerLoading] = useState(false);
+  const [storagePermissionGranted, setStoragePermissionGranted] = useState(false);
+  const [selectedStorageTarget, setSelectedStorageTarget] = useState('');
+  const [dockerHostPath, setDockerHostPath] = useState('');
 
   useEffect(() => {
+    const savedPermission = localStorage.getItem('storagePermissionGranted') === 'true';
+    const savedTarget = localStorage.getItem('storagePermissionTarget') || '';
+    const savedHostPath = localStorage.getItem('storageDockerHostPath') || '';
+    setStoragePermissionGranted(savedPermission);
+    setSelectedStorageTarget(savedTarget);
+    setDockerHostPath(savedHostPath);
     loadStorageStatus();
   }, []);
+
+  const requestStoragePermission = async () => {
+    setError('');
+
+    try {
+      if (typeof window !== 'undefined' && 'showDirectoryPicker' in window) {
+        const directoryHandle = await window.showDirectoryPicker({ mode: 'readwrite' });
+        let permission = await directoryHandle.queryPermission?.({ mode: 'readwrite' });
+
+        if (permission !== 'granted') {
+          permission = await directoryHandle.requestPermission?.({ mode: 'readwrite' });
+        }
+
+        if (permission !== 'granted') {
+          throw new Error('Storage folder access was denied. Please allow access to continue.');
+        }
+
+        if (navigator.storage?.persist) {
+          await navigator.storage.persist();
+        }
+
+        setStoragePermissionGranted(true);
+        setSelectedStorageTarget(directoryHandle.name || 'Selected folder');
+        localStorage.setItem('storagePermissionGranted', 'true');
+        localStorage.setItem('storagePermissionTarget', directoryHandle.name || 'Selected folder');
+
+        if (!dockerHostPath) {
+          const suggestedPath = '/home/<user>/decentrastore-storage';
+          const enteredPath = window.prompt(
+            'Enter absolute folder path for Docker storage mount (server machine path):',
+            suggestedPath
+          );
+
+          if (!enteredPath || !enteredPath.trim().startsWith('/')) {
+            throw new Error('Please provide an absolute Linux folder path (example: /home/minato/decentrastore-storage).');
+          }
+
+          const normalizedPath = enteredPath.trim();
+          setDockerHostPath(normalizedPath);
+          localStorage.setItem('storageDockerHostPath', normalizedPath);
+        }
+
+        return true;
+      }
+
+      const accepted = window.confirm('Allow this node to use local browser storage for pledged data?');
+      if (!accepted) {
+        throw new Error('Storage permission is required before pledging storage.');
+      }
+
+      if (navigator.storage?.persist) {
+        await navigator.storage.persist();
+      }
+
+      setStoragePermissionGranted(true);
+      setSelectedStorageTarget('Browser storage');
+      localStorage.setItem('storagePermissionGranted', 'true');
+      localStorage.setItem('storagePermissionTarget', 'Browser storage');
+
+      if (!dockerHostPath) {
+        const suggestedPath = '/home/<user>/decentrastore-storage';
+        const enteredPath = window.prompt(
+          'Enter absolute folder path for Docker storage mount (server machine path):',
+          suggestedPath
+        );
+
+        if (!enteredPath || !enteredPath.trim().startsWith('/')) {
+          throw new Error('Please provide an absolute Linux folder path (example: /home/minato/decentrastore-storage).');
+        }
+
+        const normalizedPath = enteredPath.trim();
+        setDockerHostPath(normalizedPath);
+        localStorage.setItem('storageDockerHostPath', normalizedPath);
+      }
+
+      return true;
+    } catch (err) {
+      setError(err.message || 'Unable to get storage permission.');
+      return false;
+    }
+  };
 
   const loadStorageStatus = async () => {
     try {
       setLoading(true);
       const data = await getStorageStatus();
       setCurrentPledge(data.storage_pledged / (1024 * 1024 * 1024)); // Convert to GB
+      if (data.host_storage_path) {
+        setDockerHostPath(data.host_storage_path);
+        localStorage.setItem('storageDockerHostPath', data.host_storage_path);
+      }
+      if (data.storage_target_label) {
+        setSelectedStorageTarget(data.storage_target_label);
+      }
       
       // Load container status if pledge exists
       if (data.storage_pledged > 0) {
@@ -54,14 +151,28 @@ export default function StoragePage() {
       return;
     }
 
+    if (!storagePermissionGranted) {
+      const granted = await requestStoragePermission();
+      if (!granted) {
+        return;
+      }
+    }
+
+    if (!dockerHostPath || !dockerHostPath.trim().startsWith('/')) {
+      setError('Please provide a valid absolute Docker storage folder path before pledging.');
+      return;
+    }
+
     try {
       setPledging(true);
       setError('');
       setSuccess('');
 
-      const result = await pledgeStorage(storageGB);
+      const result = await pledgeStorage(storageGB, dockerHostPath.trim(), selectedStorageTarget || null);
 
-      setSuccess(`Successfully pledged ${storageGB} GB! You'll earn ${(storageGB * 0.5).toFixed(1)} AST/day. 🚀 Your storage container is now running!`);
+      setSuccess(
+        `Successfully pledged ${storageGB} GB! Container mounted at ${result?.host_storage_path || dockerHostPath.trim()}${result?.container?.quota_enforced ? ' with hard quota enabled.' : '.'}`
+      );
       setCurrentPledge(currentPledge + storageGB);
 
       // Reload status and container info
@@ -152,6 +263,16 @@ export default function StoragePage() {
                   <Activity size={14} className={containerStatus?.docker_running ? 'text-green-400' : 'text-gray-400'} />
                   <p className="text-sm font-bold">{containerStatus?.docker_status || 'Unknown'}</p>
                 </div>
+              </div>
+              <div className={`p-4 rounded-xl col-span-2 ${isDark ? 'bg-white/5' : 'bg-white/50'}`}>
+                <p className={`text-xs mb-1 ${isDark ? 'text-white/40' : 'text-gray-500'}`}>Mounted Host Folder</p>
+                <p className="text-xs font-mono font-bold break-all">{containerStatus?.mount_source || 'N/A'}</p>
+              </div>
+              <div className={`p-4 rounded-xl col-span-2 ${isDark ? 'bg-white/5' : 'bg-white/50'}`}>
+                <p className={`text-xs mb-1 ${isDark ? 'text-white/40' : 'text-gray-500'}`}>Quota Enforcement</p>
+                <p className={`text-sm font-bold ${containerStatus?.quota_enforced ? 'text-green-400' : 'text-yellow-400'}`}>
+                  {containerStatus?.quota_enforced ? 'Hard quota enabled by Docker driver' : 'Soft quota only (driver does not support hard size limit)'}
+                </p>
               </div>
             </div>
           </div>
@@ -264,6 +385,30 @@ export default function StoragePage() {
             </div>
           </div>
 
+          <div className="mb-6">
+            <label className={`block text-sm font-medium mb-2 ${isDark ? 'text-white/60' : 'text-gray-600'}`}>
+              Docker Storage Folder (absolute path)
+            </label>
+            <input
+              type="text"
+              value={dockerHostPath}
+              onChange={(e) => {
+                const path = e.target.value;
+                setDockerHostPath(path);
+                localStorage.setItem('storageDockerHostPath', path);
+              }}
+              placeholder="/home/minato/decentrastore-storage"
+              className={`w-full px-4 py-3 rounded-xl border text-sm font-mono ${
+                isDark
+                  ? 'bg-white/5 border-white/10 text-white placeholder:text-white/40'
+                  : 'bg-white border-gray-200 text-gray-900 placeholder:text-gray-400'
+              }`}
+            />
+            <p className={`mt-2 text-xs ${isDark ? 'text-white/40' : 'text-gray-500'}`}>
+              This is the folder on the machine running Docker/backend where encrypted data will be mounted and stored.
+            </p>
+          </div>
+
           {/* Info Box */}
           <div className={`p-4 rounded-xl mb-6 flex items-start gap-3 ${
             isDark ? 'bg-blue-500/10 border border-blue-500/20' : 'bg-blue-50 border border-blue-200'
@@ -286,6 +431,35 @@ export default function StoragePage() {
                 <strong>Data Safety:</strong> Container data is persistent and cannot be deleted. Only you control access to your node.
               </p>
             </div>
+          </div>
+
+          <div className={`p-4 rounded-xl mb-6 flex items-start justify-between gap-4 ${
+            storagePermissionGranted
+              ? isDark
+                ? 'bg-green-500/10 border border-green-500/20'
+                : 'bg-green-50 border border-green-200'
+              : isDark
+                ? 'bg-amber-500/10 border border-amber-500/20'
+                : 'bg-amber-50 border border-amber-200'
+          }`}>
+            <div>
+              <p className="text-sm font-semibold mb-1">Storage Access Permission</p>
+              <p className={`text-xs ${isDark ? 'text-white/60' : 'text-gray-600'}`}>
+                {storagePermissionGranted
+                  ? `Granted${selectedStorageTarget ? `: ${selectedStorageTarget}` : ''}`
+                  : 'Permission required. Select a folder so the node can use your storage.'}
+              </p>
+            </div>
+            <button
+              onClick={requestStoragePermission}
+              className={`px-3 py-2 rounded-lg text-xs font-semibold whitespace-nowrap ${
+                isDark
+                  ? 'bg-white/10 hover:bg-white/20 text-white'
+                  : 'bg-white hover:bg-gray-100 text-gray-700 border border-gray-200'
+              }`}
+            >
+              {storagePermissionGranted ? 'Change Folder' : 'Grant Access'}
+            </button>
           </div>
 
           {error && (

@@ -6,12 +6,12 @@ import {
 } from 'lucide-react';
 import { useTheme } from '../../context/ThemeContext';
 import { useAuth } from '../../context/AuthContext';
-import { getStorageStatus, getMe, getPeers, getNetworkMetrics } from '../../utils/api';
+import { getStorageStatus, getMe, getPeers, getNetworkMetrics, getMyFileDistributionSummary } from '../../utils/api';
 import { formatBytes } from '../../utils/fileEncryption';
 
 export default function DashboardPage() {
   const { isDark } = useTheme();
-  const { user } = useAuth();
+  const { user, logout } = useAuth();
   const navigate = useNavigate();
 
   const [stats, setStats] = useState(null);
@@ -19,6 +19,12 @@ export default function DashboardPage() {
   const [loading, setLoading] = useState(true);
   const [recentActivity, setRecentActivity] = useState([]); // Real activity from API
   const [networkStats, setNetworkStats] = useState({ activeNodes: 0, totalStorage: 0, health: 'Unknown' });
+  const [distributionSummary, setDistributionSummary] = useState({
+    total_files: 0,
+    nodes_storing_user_data: 0,
+    active_nodes_storing_user_data: 0,
+    nodes: [],
+  });
 
   useEffect(() => {
     loadDashboardData();
@@ -27,14 +33,30 @@ export default function DashboardPage() {
   const loadDashboardData = async () => {
     try {
       setLoading(true);
-      const [storageData, userData, peersData, metricsData] = await Promise.all([
-        getStorageStatus(),
-        getMe(),
+      const userData = await getMe();
+
+      const [storageData, peersData, metricsData, distributionData] = await Promise.all([
+        getStorageStatus().catch(() => ({
+          storage_pledged: 0,
+          storage_used: 0,
+          files_uploaded: 0,
+          total_uploaded_size: 0,
+          chunks_stored: 0,
+          token_balance: 0,
+          is_active: true,
+        })),
         getPeers(1000).catch(() => ({ peers: [] })),
         getNetworkMetrics().catch(() => ({ total_storage: 0, active_nodes: 0 })),
+        getMyFileDistributionSummary().catch(() => ({
+          total_files: 0,
+          nodes_storing_user_data: 0,
+          active_nodes_storing_user_data: 0,
+          nodes: [],
+        })),
       ]);
       setStats(storageData);
       setUserInfo(userData);
+      setDistributionSummary(distributionData || {});
       const activeNodes = peersData?.online_peers ?? peersData?.peers?.filter((peer) => peer.status === 'online').length ?? 0;
       const totalStorage = metricsData?.total_storage || 0;
       setNetworkStats({
@@ -43,6 +65,15 @@ export default function DashboardPage() {
         health: activeNodes > 0 ? 'Healthy' : 'No Data',
       });
     } catch (err) {
+      const message = (err?.message || '').toLowerCase();
+      const isAuthIssue = message.includes('not authenticated') || message.includes('invalid or expired token') || message.includes('user not found');
+
+      if (isAuthIssue) {
+        logout();
+        navigate('/app/login', { replace: true });
+        return;
+      }
+
       console.error('Failed to load dashboard:', err);
     } finally {
       setLoading(false);
@@ -317,6 +348,42 @@ export default function DashboardPage() {
                   </span>
                 </div>
               </div>
+            </div>
+
+            <div className={`mt-4 p-4 rounded-xl ${
+              isDark ? 'bg-white/5 border border-white/10' : 'bg-gray-50 border border-gray-200'
+            }`}>
+              <div className="flex items-center gap-2 mb-3">
+                <Database size={16} className="text-purple-400" />
+                <p className="font-semibold text-sm">My Data Distribution</p>
+              </div>
+              <div className="space-y-2 text-xs">
+                <div className="flex justify-between">
+                  <span className={isDark ? 'text-white/60' : 'text-gray-600'}>Files Tracked</span>
+                  <span className="font-mono">{distributionSummary.total_files || 0}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className={isDark ? 'text-white/60' : 'text-gray-600'}>Nodes Storing My Data</span>
+                  <span className="font-mono">{distributionSummary.nodes_storing_user_data || 0}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className={isDark ? 'text-white/60' : 'text-gray-600'}>Active Storage Nodes</span>
+                  <span className="font-mono text-green-400">{distributionSummary.active_nodes_storing_user_data || 0}</span>
+                </div>
+              </div>
+              {distributionSummary.nodes?.length > 0 && (
+                <div className={`mt-3 pt-3 border-t ${isDark ? 'border-white/10' : 'border-gray-200'}`}>
+                  <p className={`text-[11px] mb-2 ${isDark ? 'text-white/50' : 'text-gray-500'}`}>Node IDs / IPs</p>
+                  <div className="space-y-1 max-h-28 overflow-auto pr-1">
+                    {distributionSummary.nodes.slice(0, 8).map((node) => (
+                      <div key={node.node_id} className="flex items-center justify-between gap-2">
+                        <span className="text-[11px] font-mono truncate">{node.node_id}</span>
+                        <span className={`text-[11px] ${isDark ? 'text-white/60' : 'text-gray-500'}`}>{node.ip_address || 'N/A'}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
             </div>
           </div>
 

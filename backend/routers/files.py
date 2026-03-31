@@ -22,6 +22,80 @@ class FileMetadata(BaseModel):
     iv: str  # Base64 encoded initialization vector
 
 
+async def _resolve_storage_nodes(db, owner_node_id: str, max_nodes: int = 3):
+    """Choose active storage nodes that hold file replicas and include owner fallback."""
+    projection = {
+        "_id": 0,
+        "node_id": 1,
+        "ip_address": 1,
+        "region": 1,
+        "is_active": 1,
+    }
+
+    cursor = db.users.find(
+        {
+            "is_active": True,
+            "$or": [
+                {"is_storage_node": True},
+                {"storage_pledged": {"$gt": 0}},
+                {"storage_pledged_gb": {"$gt": 0}},
+            ],
+        },
+        projection,
+    ).limit(50)
+
+    selected_nodes = []
+    seen = set()
+    async for node in cursor:
+        node_id = node.get("node_id")
+        if not node_id or node_id in seen:
+            continue
+        selected_nodes.append({
+            "node_id": node_id,
+            "ip_address": node.get("ip_address") or "N/A",
+            "region": node.get("region") or "Unknown",
+            "is_active": bool(node.get("is_active", True)),
+        })
+        seen.add(node_id)
+        if len(selected_nodes) >= max_nodes:
+            break
+
+    if owner_node_id and owner_node_id not in seen:
+        owner_doc = await db.users.find_one({"node_id": owner_node_id}, projection)
+        if owner_doc:
+            selected_nodes.insert(0, {
+                "node_id": owner_doc.get("node_id"),
+                "ip_address": owner_doc.get("ip_address") or "N/A",
+                "region": owner_doc.get("region") or "Unknown",
+                "is_active": bool(owner_doc.get("is_active", True)),
+            })
+
+    # Keep only the requested number of replica destinations
+    return selected_nodes[:max_nodes]
+
+
+async def _hydrate_file_storage_nodes(db, file_doc: dict, max_nodes: int = 3):
+    """Return storage nodes for a file, with fallback for old records."""
+    stored_nodes = file_doc.get("storage_nodes") or []
+    if stored_nodes:
+        return stored_nodes[:max_nodes]
+
+    # First fallback: use chunk replica metadata if available.
+    sample_chunk = await db.chunks.find_one({"cid": file_doc.get("cid")}, {"_id": 0, "replicas": 1})
+    replicas = (sample_chunk or {}).get("replicas") or []
+    if replicas:
+        return replicas[:max_nodes]
+
+    # Last fallback: show owner node so UI can still display at least one destination node.
+    owner_node_id = file_doc.get("owner_node_id")
+    if owner_node_id:
+        owner_nodes = await _resolve_storage_nodes(db, owner_node_id=owner_node_id, max_nodes=1)
+        if owner_nodes:
+            return owner_nodes
+
+    return []
+
+
 @router.post("/upload")
 async def upload_file_metadata(
     file_metadata: FileMetadata,
@@ -37,6 +111,8 @@ async def upload_file_metadata(
     if existing:
         raise HTTPException(status_code=409, detail="File with this CID already exists")
 
+    storage_nodes = await _resolve_storage_nodes(db, current_user["sub"], max_nodes=3)
+
     file_doc = {
         "cid": file_metadata.cid,
         "owner_node_id": current_user["sub"],
@@ -51,6 +127,9 @@ async def upload_file_metadata(
         "uploaded_at": datetime.utcnow(),
         "is_complete": False,
         "chunks_uploaded": 0,
+        "storage_nodes": storage_nodes,
+        "storage_node_ids": [node.get("node_id") for node in storage_nodes if node.get("node_id")],
+        "replica_count": len(storage_nodes),
     }
 
     await db.files.insert_one(file_doc)
@@ -58,6 +137,7 @@ async def upload_file_metadata(
     return {
         "cid": file_metadata.cid,
         "status": "metadata_saved",
+        "storage_nodes": storage_nodes,
         "message": "Upload file chunks next",
     }
 
@@ -86,6 +166,8 @@ async def upload_chunk(
     chunk_data_b64 = base64.b64encode(chunk_data).decode('utf-8')
 
     # Store chunk
+    file_storage_nodes = file_doc.get("storage_nodes") or []
+
     chunk_doc = {
         "chunk_id": chunk_id,
         "cid": cid,
@@ -94,7 +176,7 @@ async def upload_chunk(
         "data": chunk_data_b64,
         "size": len(chunk_data),
         "uploaded_at": datetime.utcnow(),
-        "replicas": [],  # Future: track storage nodes holding this chunk
+        "replicas": file_storage_nodes,
     }
 
     # Check if chunk already exists
@@ -140,7 +222,65 @@ async def list_files(current_user: dict = Depends(get_current_user)):
 
     files = await cursor.to_list(length=100)
 
+    # Backfill storage mapping for older file records that predate replica metadata.
+    for file_doc in files:
+        storage_nodes = await _hydrate_file_storage_nodes(db, file_doc, max_nodes=3)
+        file_doc["storage_nodes"] = storage_nodes
+        file_doc["storage_node_ids"] = [node.get("node_id") for node in storage_nodes if node.get("node_id")]
+        file_doc["replica_count"] = len(storage_nodes)
+
     return {"files": files}
+
+
+@router.get("/distribution/summary")
+async def get_file_distribution_summary(current_user: dict = Depends(get_current_user)):
+    """Get per-user file distribution summary: node IDs, node IPs and active node counts."""
+    db = get_db()
+    if db is None:
+        raise HTTPException(status_code=503, detail="Database unavailable")
+
+    cursor = db.files.find(
+        {"owner_node_id": current_user["sub"]},
+        {
+            "_id": 0,
+            "cid": 1,
+            "filename": 1,
+            "size": 1,
+            "storage_nodes": 1,
+            "uploaded_at": 1,
+        },
+    ).sort("uploaded_at", -1)
+
+    files = await cursor.to_list(length=200)
+    unique_nodes = {}
+    files_with_distribution = 0
+
+    for file_doc in files:
+        storage_nodes = await _hydrate_file_storage_nodes(db, file_doc, max_nodes=3)
+        file_doc["storage_nodes"] = storage_nodes
+        if storage_nodes:
+            files_with_distribution += 1
+        for node in storage_nodes:
+            node_id = node.get("node_id")
+            if not node_id:
+                continue
+            unique_nodes[node_id] = {
+                "node_id": node_id,
+                "ip_address": node.get("ip_address") or "N/A",
+                "region": node.get("region") or "Unknown",
+                "is_active": bool(node.get("is_active", False)),
+            }
+
+    active_nodes_count = sum(1 for node in unique_nodes.values() if node.get("is_active"))
+
+    return {
+        "total_files": len(files),
+        "files_with_distribution": files_with_distribution,
+        "nodes_storing_user_data": len(unique_nodes),
+        "active_nodes_storing_user_data": active_nodes_count,
+        "nodes": list(unique_nodes.values()),
+        "files": files,
+    }
 
 
 @router.get("/{cid}")

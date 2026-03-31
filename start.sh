@@ -38,6 +38,22 @@ find_python() {
   return 1
 }
 
+wait_for_http_ok() {
+  local url="$1"
+  local timeout_seconds="$2"
+  local elapsed=0
+
+  while [ "$elapsed" -lt "$timeout_seconds" ]; do
+    if curl -s "$url" > /dev/null 2>&1; then
+      return 0
+    fi
+    sleep 1
+    elapsed=$((elapsed + 1))
+  done
+
+  return 1
+}
+
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 echo "🚀 DecentraStore — Starting All Services"
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
@@ -89,13 +105,13 @@ if ! "$PYTHON_BIN" -c "import uvicorn" > /dev/null 2>&1; then
   }
 fi
 
-"$PYTHON_BIN" -m uvicorn main:app --host 0.0.0.0 --port 8000 > /tmp/decentrastore-backend.log 2>&1 &
+cd "$SCRIPT_DIR"
+"$PYTHON_BIN" -m uvicorn backend.main:app --host 0.0.0.0 --port 8000 > /tmp/decentrastore-backend.log 2>&1 &
 BACKEND_PID=$!
 echo "   Backend PID: $BACKEND_PID"
-sleep 3
 
 # Test backend
-if curl -s http://localhost:8000/api/health > /dev/null 2>&1; then
+if wait_for_http_ok "http://localhost:8000/api/health" 20; then
   echo "   ✅ Backend is running"
 else
   echo "   ❌ Backend failed to start. Check /tmp/decentrastore-backend.log"
@@ -118,10 +134,9 @@ fi
 npm run dev > /tmp/decentrastore-frontend.log 2>&1 &
 FRONTEND_PID=$!
 echo "   Frontend PID: $FRONTEND_PID"
-sleep 4
 
 # Test frontend
-if curl -s http://localhost:5173/ > /dev/null 2>&1; then
+if wait_for_http_ok "http://localhost:5173/" 30; then
   echo "   ✅ Frontend is running"
 else
   echo "   ❌ Frontend failed to start. Check /tmp/decentrastore-frontend.log"

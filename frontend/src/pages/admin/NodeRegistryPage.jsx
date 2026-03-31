@@ -45,7 +45,8 @@ export default function NodeRegistryPage() {
     
     const matchesSearch = !searchTerm || 
       node.node_id?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      node.public_key_fingerprint?.toLowerCase().includes(searchTerm.toLowerCase());
+      node.public_key_fingerprint?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      node.ip_address?.toLowerCase().includes(searchTerm.toLowerCase());
     
     return matchesFilter && matchesSearch;
   });
@@ -214,7 +215,16 @@ export default function NodeRegistryPage() {
                     Public Key Fingerprint
                   </th>
                   <th className={`text-left p-4 text-xs font-semibold ${isDark ? 'text-white/40' : 'text-gray-500'}`}>
+                    IP Address
+                  </th>
+                  <th className={`text-left p-4 text-xs font-semibold ${isDark ? 'text-white/40' : 'text-gray-500'}`}>
                     Balance (AST)
+                  </th>
+                  <th className={`text-left p-4 text-xs font-semibold ${isDark ? 'text-white/40' : 'text-gray-500'}`}>
+                    Files Stored
+                  </th>
+                  <th className={`text-left p-4 text-xs font-semibold ${isDark ? 'text-white/40' : 'text-gray-500'}`}>
+                    Chunks Hosted
                   </th>
                   <th className={`text-left p-4 text-xs font-semibold ${isDark ? 'text-white/40' : 'text-gray-500'}`}>
                     Storage Pledged
@@ -253,8 +263,23 @@ export default function NodeRegistryPage() {
                       </code>
                     </td>
                     <td className="p-4">
+                      <code className={`text-xs font-mono ${isDark ? 'text-white/70' : 'text-gray-700'}`}>
+                        {node.ip_address || 'N/A'}
+                      </code>
+                    </td>
+                    <td className="p-4">
                       <span className="text-sm font-semibold">
-                        {node.balance?.toFixed(2) || '0.00'}
+                        {(node.token_balance ?? node.balance ?? 0).toFixed(2)}
+                      </span>
+                    </td>
+                    <td className="p-4">
+                      <span className="text-sm font-semibold text-blue-400">
+                        {node.files_stored || 0}
+                      </span>
+                    </td>
+                    <td className="p-4">
+                      <span className="text-sm font-semibold text-indigo-400">
+                        {node.chunks_stored || 0}
                       </span>
                     </td>
                     <td className="p-4">

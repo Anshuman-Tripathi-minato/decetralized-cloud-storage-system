@@ -3,6 +3,8 @@ Docker Service — Storage Node Container Management
 Handles creation and management of Docker containers for storage nodes
 """
 import logging
+import os
+import re
 import docker
 from docker.errors import DockerException, APIError
 from typing import Optional, Dict, Any
@@ -28,8 +30,19 @@ class DockerService:
             self.client = docker.from_env()
             logger.info("✅ Docker client initialized successfully")
         except DockerException as e:
-            logger.warning(f"Docker client unavailable: {e}")
+            logger.warning(f"Docker client unavailable via environment: {e}")
             self.client = None
+
+            # Fallback for Linux local development where DOCKER_HOST may be misconfigured.
+            for socket_path in ("unix:///var/run/docker.sock", "unix:///run/user/1000/docker.sock"):
+                try:
+                    fallback_client = docker.DockerClient(base_url=socket_path)
+                    fallback_client.ping()
+                    self.client = fallback_client
+                    logger.info(f"✅ Docker client initialized via fallback socket: {socket_path}")
+                    break
+                except Exception:
+                    continue
 
     def is_available(self) -> bool:
         """Check if Docker is available and connected"""
@@ -48,10 +61,21 @@ class DockerService:
                 self._availability_checked = True
             return False
 
+    @staticmethod
+    def _safe_node_id(node_id: str) -> str:
+        return re.sub(r"[^a-zA-Z0-9_.-]", "-", node_id)
+
+    def _container_name(self, node_id: str) -> str:
+        return f"decentrastore-storage-{self._safe_node_id(node_id)[:32]}"
+
+    def _volume_name(self, node_id: str) -> str:
+        return f"decentrastore-data-{self._safe_node_id(node_id)[:32]}"
+
     def create_storage_container(
         self,
         node_id: str,
         storage_gb: int,
+        host_storage_path: Optional[str] = None,
         **kwargs
     ) -> Dict[str, Any]:
         """
@@ -83,52 +107,99 @@ class DockerService:
                 "volume_path": None,
             }
 
-        container_name = f"decentrastore-storage-{node_id[:16]}"
-        volume_name = f"decentrastore-data-{node_id[:16]}"
+        container_name = self._container_name(node_id)
+        volume_name = self._volume_name(node_id)
         
         try:
-            # Create or get volume
+            # Recreate container when pledge changes so mount/quota are updated.
             try:
-                volume = self.client.volumes.get(volume_name)
-                logger.info(f"Using existing volume: {volume_name}")
+                existing_container = self.client.containers.get(container_name)
+                existing_container.stop(timeout=5)
+                existing_container.remove(v=True, force=True)
+                logger.info(f"Recreated existing container: {container_name}")
             except docker.errors.NotFound:
-                volume = self.client.volumes.create(
-                    name=volume_name,
-                    driver='local',
-                    labels={
-                        'decentrastore': 'true',
-                        'node_id': node_id,
-                        'storage_gb': str(storage_gb),
-                    }
-                )
-                logger.info(f"Created new volume: {volume_name}")
+                pass
 
-            # Create container
-            container = self.client.containers.create(
-                image='alpine:latest',  # Lightweight base image
-                name=container_name,
-                volumes={
+            mount_source = None
+            volumes = {}
+            mount_type = "docker-volume"
+
+            if host_storage_path:
+                mount_source = os.path.abspath(host_storage_path)
+                os.makedirs(mount_source, exist_ok=True)
+                volumes = {
+                    mount_source: {
+                        'bind': '/storage',
+                        'mode': 'rw'
+                    }
+                }
+                mount_type = "bind"
+            else:
+                try:
+                    volume = self.client.volumes.get(volume_name)
+                    logger.info(f"Using existing volume: {volume_name}")
+                except docker.errors.NotFound:
+                    volume = self.client.volumes.create(
+                        name=volume_name,
+                        driver='local',
+                        labels={
+                            'decentrastore': 'true',
+                            'node_id': node_id,
+                            'storage_gb': str(storage_gb),
+                        }
+                    )
+                    logger.info(f"Created new volume: {volume_name}")
+
+                mount_source = volume_name
+                volumes = {
                     volume_name: {
                         'bind': '/storage',
                         'mode': 'rw'
                     }
-                },
-                environment={
+                }
+
+            common_config = {
+                'image': 'alpine:latest',
+                'name': container_name,
+                'volumes': volumes,
+                'environment': {
                     'NODE_ID': node_id,
                     'STORAGE_GB': str(storage_gb),
                     'PURPOSE': 'decentrastore-chunk-storage',
                 },
-                labels={
+                'labels': {
                     'decentrastore': 'true',
                     'node_id': node_id,
                     'node_type': 'storage',
                     'created_at': 'now',
                     'storage_gb': str(storage_gb),
+                    'mount_type': mount_type,
                 },
-                stdin_open=False,
-                tty=False,
-                restart_policy={'Name': 'unless-stopped'},
-            )
+                'stdin_open': False,
+                'tty': False,
+                'restart_policy': {'Name': 'unless-stopped'},
+            }
+
+            quota_enforced = True
+            warning_message = None
+
+            try:
+                self.client.images.get('alpine:latest')
+            except docker.errors.ImageNotFound:
+                logger.info("Pulling missing image alpine:latest")
+                self.client.images.pull('alpine:latest')
+
+            try:
+                container = self.client.containers.create(
+                    **common_config,
+                    storage_opt={'size': f'{int(storage_gb)}G'},
+                )
+            except APIError as quota_error:
+                # Some Docker drivers do not support storage_opt size quotas.
+                logger.warning(f"Storage quota option unsupported, retrying without quota: {quota_error}")
+                quota_enforced = False
+                warning_message = "Container started, but hard Docker quota is unsupported by current storage driver"
+                container = self.client.containers.create(**common_config)
 
             # Start container
             container.start()
@@ -138,10 +209,13 @@ class DockerService:
                 "container_id": container.id[:12],  # Short ID
                 "container_name": container_name,
                 "status": "running",
-                "message": f"Storage node container created successfully",
+                "message": warning_message or "Storage node container created successfully",
                 "storage_gb": storage_gb,
-                "volume_path": f"/var/lib/docker/volumes/{volume_name}/_data",
-                "volume_name": volume_name,
+                "volume_path": f"/var/lib/docker/volumes/{volume_name}/_data" if mount_type == "docker-volume" else mount_source,
+                "volume_name": volume_name if mount_type == "docker-volume" else None,
+                "mount_type": mount_type,
+                "mount_source": mount_source,
+                "quota_enforced": quota_enforced,
             }
 
         except APIError as e:
@@ -170,7 +244,7 @@ class DockerService:
         if not self.is_available():
             return None
 
-        container_name = f"decentrastore-storage-{node_id[:16]}"
+        container_name = self._container_name(node_id)
         try:
             container = self.client.containers.get(container_name)
             stats = container.stats(stream=False)
@@ -226,7 +300,7 @@ class DockerService:
         if not self.is_available():
             return False
 
-        container_name = f"decentrastore-storage-{node_id[:16]}"
+        container_name = self._container_name(node_id)
         try:
             container = self.client.containers.get(container_name)
             container.stop()
@@ -244,7 +318,7 @@ class DockerService:
         if not self.is_available():
             return None
 
-        volume_name = f"decentrastore-data-{node_id[:16]}"
+        volume_name = self._volume_name(node_id)
         try:
             volume = self.client.volumes.get(volume_name)
             return volume.name

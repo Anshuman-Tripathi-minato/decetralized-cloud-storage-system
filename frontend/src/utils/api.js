@@ -2,15 +2,35 @@
  * API Client for DecentraStore Backend
  */
 
-const DEFAULT_API_ROOT = 'https://decetralized-cloud-storage-system-production.up.railway.app';
-const RAW_API_ROOT = (import.meta.env.VITE_API_URL || DEFAULT_API_ROOT).replace(/\/$/, '');
+const REMOTE_API_ROOT = 'https://decentralized-cloud-storage-system-production.up.railway.app';
 
-// Some deployments used an alternate hostname spelling; normalize to the active backend host.
-const API_ROOT = RAW_API_ROOT.replace(
-  'decentralized-cloud-storage-system-production.up.railway.app',
-  'decetralized-cloud-storage-system-production.up.railway.app'
-);
-const API_BASE = `${API_ROOT}/api`;
+function normalizeApiRoot(rawValue) {
+  const value = (rawValue || '').trim();
+  if (!value) return '';
+
+  // Accept relative API root like /backend or /api-gateway.
+  if (value.startsWith('/')) {
+    return value.replace(/\/$/, '');
+  }
+
+  if (/^https?:\/\//i.test(value)) {
+    return value.replace(/\/$/, '');
+  }
+
+  // Accept protocol-relative host values.
+  if (value.startsWith('//')) {
+    return `https:${value}`.replace(/\/$/, '');
+  }
+
+  // If env value is host-only, assume HTTPS to avoid invalid fetch URLs.
+  return `https://${value}`.replace(/\/$/, '');
+}
+
+const ENV_API_ROOT = normalizeApiRoot(import.meta.env.VITE_API_URL || '');
+const IS_LOCAL_HOST = ['localhost', '127.0.0.1'].includes(window.location.hostname);
+const DEFAULT_API_ROOT = IS_LOCAL_HOST ? 'http://localhost:8000' : REMOTE_API_ROOT;
+const API_ROOT = ENV_API_ROOT || DEFAULT_API_ROOT;
+const API_BASE = API_ROOT.endsWith('/api') ? API_ROOT : `${API_ROOT}/api`;
 
 /**
  * Make an API request
@@ -29,8 +49,11 @@ async function apiRequest(endpoint, options = {}) {
     },
   };
 
-  // Add auth token if available
-  const token = localStorage.getItem('decentrastore-token');
+  // Use admin token for admin-only endpoint groups; fallback to user token when needed.
+  const userToken = localStorage.getItem('decentrastore-token');
+  const adminToken = localStorage.getItem('decentrastore-admin-token');
+  const isAdminScopedEndpoint = endpoint.startsWith('/admin') || endpoint.startsWith('/blockchain');
+  const token = isAdminScopedEndpoint ? (adminToken || userToken) : userToken;
   if (token) {
     config.headers['Authorization'] = `Bearer ${token}`;
   }
@@ -88,10 +111,14 @@ export async function getStorageStatus() {
   return apiRequest('/storage/status');
 }
 
-export async function pledgeStorage(gigabytes) {
+export async function pledgeStorage(gigabytes, hostStoragePath, storageTargetLabel = null) {
   return apiRequest('/storage/pledge', {
     method: 'POST',
-    body: JSON.stringify({ gigabytes }),
+    body: JSON.stringify({
+      gigabytes,
+      host_storage_path: hostStoragePath,
+      storage_target_label: storageTargetLabel,
+    }),
   });
 }
 
@@ -161,6 +188,10 @@ export async function listFiles() {
   return apiRequest('/files/list');
 }
 
+export async function getMyFileDistributionSummary() {
+  return apiRequest('/files/distribution/summary');
+}
+
 /**
  * Get file metadata by CID
  */
@@ -206,6 +237,10 @@ export async function getAdminStats() {
 
 export async function getAdminNodes() {
   return apiRequest('/admin/nodes');
+}
+
+export async function getAdminStorageDistribution(limit = 200) {
+  return apiRequest(`/admin/storage-distribution?limit=${limit}`);
 }
 
 export async function banNode(nodeId) {

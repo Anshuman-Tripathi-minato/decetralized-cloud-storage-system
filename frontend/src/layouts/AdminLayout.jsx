@@ -1,3 +1,4 @@
+import { useEffect, useRef, useState } from 'react';
 import { NavLink, Outlet, useNavigate } from 'react-router-dom';
 import {
   LayoutDashboard, Activity, FileText, Settings2, Shield,
@@ -19,6 +20,25 @@ export default function AdminLayout() {
   const { isDark } = useTheme();
   const { adminUser, adminLogout } = useAuth();
   const navigate = useNavigate();
+  const [showNotifications, setShowNotifications] = useState(false);
+  const notificationRef = useRef(null);
+
+  const notifications = [
+    { id: 1, title: 'Node heartbeat alerts: 0', time: 'Just now' },
+    { id: 2, title: 'Network sync completed', time: '7 min ago' },
+    { id: 3, title: 'Policy update deployed', time: '34 min ago' },
+  ];
+
+  useEffect(() => {
+    const handleClickOutside = (event) => {
+      if (notificationRef.current && !notificationRef.current.contains(event.target)) {
+        setShowNotifications(false);
+      }
+    };
+
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
 
   const handleLogout = () => {
     adminLogout();
@@ -171,10 +191,34 @@ export default function AdminLayout() {
               }`}>
               Hyperledger v2.5
             </div>
-            <button className={`w-9 h-9 rounded-full flex items-center justify-center cursor-pointer
-              ${isDark ? 'bg-white/8 hover:bg-white/15 text-white/60' : 'bg-black/8 hover:bg-black/12 text-gray-500'}`}>
-              <Bell size={16} />
-            </button>
+            <div className="relative" ref={notificationRef}>
+              <button
+                onClick={() => setShowNotifications((prev) => !prev)}
+                className={`w-9 h-9 rounded-full flex items-center justify-center cursor-pointer relative
+                ${isDark ? 'bg-white/8 hover:bg-white/15 text-white/60' : 'bg-black/8 hover:bg-black/12 text-gray-500'}`}
+                aria-label="Toggle admin notifications"
+              >
+                <Bell size={16} />
+                <span className="absolute top-1.5 right-1.5 w-2 h-2 rounded-full bg-red-500" />
+              </button>
+
+              {showNotifications && (
+                <div className={`absolute right-0 mt-2 w-72 rounded-xl border z-50 overflow-hidden
+                  ${isDark ? 'bg-[#111426] border-white/10' : 'bg-white border-black/10 shadow-xl'}`}>
+                  <div className={`px-4 py-3 text-sm font-semibold ${isDark ? 'border-b border-white/10' : 'border-b border-black/10'}`}>
+                    Admin Notifications
+                  </div>
+                  <div className="max-h-72 overflow-y-auto">
+                    {notifications.map((item) => (
+                      <div key={item.id} className={`px-4 py-3 text-sm ${isDark ? 'hover:bg-white/5' : 'hover:bg-black/5'}`}>
+                        <p className="font-medium">{item.title}</p>
+                        <p className={`text-xs mt-1 ${isDark ? 'text-white/40' : 'text-gray-400'}`}>{item.time}</p>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
             <ThemeToggle />
           </div>
         </header>

@@ -243,6 +243,31 @@ export default function FilesPage() {
                       {file.cid}
                     </code>
                   </div>
+
+                  <div className="mt-3">
+                    <span className={`text-xs ${isDark ? 'text-white/40' : 'text-gray-400'}`}>
+                      Stored On Nodes:
+                    </span>
+                    {Array.isArray(file.storage_nodes) && file.storage_nodes.length > 0 ? (
+                      <div className="mt-2 grid grid-cols-1 md:grid-cols-2 gap-2">
+                        {file.storage_nodes.map((node) => (
+                          <div
+                            key={`${file.cid}-${node.node_id}`}
+                            className={`px-3 py-2 rounded-lg text-xs flex items-center justify-between gap-2 ${
+                              isDark ? 'bg-white/5 border border-white/10' : 'bg-gray-50 border border-gray-200'
+                            }`}
+                          >
+                            <span className="font-mono truncate">{node.node_id || 'Unknown Node'}</span>
+                            <span className={isDark ? 'text-white/60' : 'text-gray-500'}>{node.ip_address || 'N/A'}</span>
+                          </div>
+                        ))}
+                      </div>
+                    ) : (
+                      <p className={`mt-1 text-xs ${isDark ? 'text-white/50' : 'text-gray-500'}`}>
+                        Node mapping not available yet.
+                      </p>
+                    )}
+                  </div>
                 </div>
 
               </div>
