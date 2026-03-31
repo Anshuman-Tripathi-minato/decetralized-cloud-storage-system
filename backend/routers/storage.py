@@ -2,11 +2,12 @@
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 from datetime import datetime
-import os
 from typing import Optional
 from backend.core.security import get_current_user
 from backend.core.database import get_db
 from backend.services.docker_service import get_docker_service
+from backend.services.provider_agent_service import get_provider_agent_service
+from backend.core.config import settings
 
 router = APIRouter()
 
@@ -15,6 +16,7 @@ class PledgeRequest(BaseModel):
     gigabytes: int
     host_storage_path: Optional[str] = None
     storage_target_label: Optional[str] = None
+    provider_agent_url: Optional[str] = None
 
 
 @router.get("/status")
@@ -44,11 +46,23 @@ async def storage_status(current_user: dict = Depends(get_current_user)):
         storage_used_pct = min(100, (total_uploaded_size / storage_pledged) * 100)
 
     # Get container status
-    docker_service = get_docker_service()
-    container_running = docker_service.is_container_running(current_user["sub"])
+    container_running = False
     container_info = None
-    if container_running:
-        container_info = docker_service.get_container_info(current_user["sub"])
+    provider_agent_url = user.get("provider_agent_url")
+
+    if provider_agent_url:
+        agent_service = get_provider_agent_service()
+        try:
+            health = await agent_service.health_check(provider_agent_url)
+            container_running = bool(health.get("ok", False))
+            container_info = health
+        except Exception:
+            container_running = False
+    else:
+        docker_service = get_docker_service()
+        container_running = docker_service.is_container_running(current_user["sub"])
+        if container_running:
+            container_info = docker_service.get_container_info(current_user["sub"])
 
     return {
         "node_id": current_user["sub"],
@@ -65,6 +79,8 @@ async def storage_status(current_user: dict = Depends(get_current_user)):
         "host_storage_path": user.get("host_storage_path"),
         "storage_target_label": user.get("storage_target_label"),
         "container_quota_enforced": user.get("container_quota_enforced"),
+        "provider_agent_url": user.get("provider_agent_url"),
+        "provisioning_mode": user.get("provisioning_mode") or "legacy-local-docker",
     }
 
 
@@ -103,26 +119,64 @@ async def pledge_storage(
     if not selected_host_path:
         raise HTTPException(
             status_code=400,
-            detail="Please provide an absolute folder path for Docker storage mount before pledging"
+            detail="Please provide a folder path for provider machine Docker storage mount before pledging"
         )
-    if not os.path.isabs(selected_host_path):
-        raise HTTPException(status_code=400, detail="host_storage_path must be an absolute path")
 
-    os.makedirs(selected_host_path, exist_ok=True)
-
-    # Create or recreate Docker container with updated total quota.
-    docker_service = get_docker_service()
-    container_result = docker_service.create_storage_container(
-        node_id=current_user["sub"],
-        storage_gb=max(1, total_pledge_gb),
-        host_storage_path=selected_host_path,
+    agent_service = get_provider_agent_service()
+    normalized_agent_url = agent_service.normalize_agent_url(
+        req.provider_agent_url or user.get("provider_agent_url")
     )
+
+    if not normalized_agent_url:
+        existing_ip = user.get("ip_address")
+        if existing_ip:
+            normalized_agent_url = agent_service.normalize_agent_url(
+                f"{existing_ip}:{settings.NODE_AGENT_DEFAULT_PORT}"
+            )
+
+    if not normalized_agent_url:
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                "provider_agent_url is required. Run the Node Agent on provider machine "
+                f"and share URL (example: http://<provider-ip>:{settings.NODE_AGENT_DEFAULT_PORT})."
+            )
+        )
+
+    try:
+        await agent_service.health_check(normalized_agent_url)
+    except Exception as agent_error:
+        raise HTTPException(
+            status_code=503,
+            detail=(
+                "Provider node agent is unreachable. Start node agent on provider machine and verify "
+                f"URL {normalized_agent_url}. Error: {str(agent_error)}"
+            ),
+        )
+
+    try:
+        container_result = await agent_service.provision_storage(
+            agent_url=normalized_agent_url,
+            node_id=current_user["sub"],
+            storage_gb=max(1, total_pledge_gb),
+            host_storage_path=selected_host_path,
+        )
+    except Exception as provision_error:
+        raise HTTPException(
+            status_code=503,
+            detail=(
+                "Unable to provision storage container on provider machine. "
+                f"Error: {str(provision_error)}"
+            )
+        )
 
     if container_result.get("status") != "running":
         raise HTTPException(
             status_code=503,
-            detail=f"Unable to create storage container: {container_result.get('message', 'Unknown Docker error')}. Please ensure Docker is running and accessible."
+            detail=f"Provider container is not running: {container_result.get('message', 'Unknown error')}"
         )
+
+    provider_host = agent_service.extract_host(normalized_agent_url)
 
     update_data = {
         "storage_pledged": new_pledge,
@@ -130,7 +184,12 @@ async def pledge_storage(
         "last_pledge_at": datetime.utcnow(),
         "host_storage_path": selected_host_path,
         "storage_target_label": req.storage_target_label,
+        "provider_agent_url": normalized_agent_url,
+        "provisioning_mode": "provider-agent",
     }
+
+    if provider_host:
+        update_data["ip_address"] = provider_host
 
     update_data["container_id"] = container_result["container_id"]
     update_data["container_name"] = container_result["container_name"]
@@ -161,6 +220,7 @@ async def pledge_storage(
         "container_id": container_result["container_id"],
         "container_name": container_result["container_name"],
         "storage_gb": max(1, total_pledge_gb),
+        "provider_agent_url": normalized_agent_url,
         "volume_name": container_result.get("volume_name"),
         "mount_type": container_result.get("mount_type"),
         "mount_source": container_result.get("mount_source"),
@@ -186,6 +246,7 @@ async def pledge_storage(
         "new_balance": new_balance,
         "message": f"Successfully pledged {req.gigabytes} GB. Earned {reward} AST!",
         "host_storage_path": selected_host_path,
+        "provider_agent_url": normalized_agent_url,
         "container": container_result,
     }
 
@@ -213,9 +274,25 @@ async def get_container_status(current_user: dict = Depends(get_current_user)):
             "message": "No storage container found for this node"
         }
 
-    # Get live status from Docker
-    docker_service = get_docker_service()
-    container_info = docker_service.get_container_info(current_user["sub"])
+    # Get live status from provider agent (primary mode), fallback to local Docker for legacy records.
+    provider_agent_url = container_record.get("provider_agent_url") or user.get("provider_agent_url")
+    docker_status = "unknown"
+    docker_running = False
+
+    if provider_agent_url:
+        agent_service = get_provider_agent_service()
+        try:
+            health = await agent_service.health_check(provider_agent_url)
+            docker_running = bool(health.get("ok", False))
+            docker_status = health.get("status") or ("running" if docker_running else "unknown")
+        except Exception:
+            docker_running = False
+            docker_status = "agent-unreachable"
+    else:
+        docker_service = get_docker_service()
+        container_info = docker_service.get_container_info(current_user["sub"])
+        docker_status = container_info.get("status") if container_info else "unknown"
+        docker_running = docker_service.is_container_running(current_user["sub"])
 
     return {
         "has_container": True,
@@ -226,9 +303,10 @@ async def get_container_status(current_user: dict = Depends(get_current_user)):
         "mount_type": container_record.get("mount_type"),
         "mount_source": container_record.get("mount_source"),
         "quota_enforced": container_record.get("quota_enforced", False),
+        "provider_agent_url": provider_agent_url,
         "created_at": container_record.get("created_at"),
-        "docker_status": container_info.get("status") if container_info else "unknown",
-        "docker_running": docker_service.is_container_running(current_user["sub"]),
+        "docker_status": docker_status,
+        "docker_running": docker_running,
     }
 
 
@@ -239,9 +317,8 @@ async def list_containers(current_user: dict = Depends(get_current_user)):
     if db is None:
         raise HTTPException(status_code=503, detail="Database unavailable")
 
-    # Check if user is admin (optional - can be removed for user view)
-    docker_service = get_docker_service()
-    containers = docker_service.list_storage_containers()
+    cursor = db.storage_containers.find({}, {"_id": 0}).sort("updated_at", -1)
+    containers = await cursor.to_list(length=500)
 
     return {
         "count": len(containers),

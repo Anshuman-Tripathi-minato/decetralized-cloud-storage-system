@@ -46,7 +46,7 @@ export default function PublicLayout() {
   };
 
   return (
-    <div className={`flex h-screen overflow-hidden ${isDark ? 'bg-animated text-white' : 'bg-animated-light text-gray-900'}`}>
+    <div className={`flex h-screen w-full overflow-hidden ${isDark ? 'bg-animated text-white' : 'bg-animated-light text-gray-900'}`}>
 
       {/* ── Floating Orbs ── */}
       <div className="orb w-96 h-96 opacity-20 top-[-100px] left-[-100px]"
@@ -195,7 +195,7 @@ export default function PublicLayout() {
         </header>
 
         {/* Page content */}
-        <main className="flex-1 overflow-y-auto p-6">
+        <main className="flex-1 overflow-y-auto overflow-x-hidden p-6">
           <Outlet />
         </main>
       </div>

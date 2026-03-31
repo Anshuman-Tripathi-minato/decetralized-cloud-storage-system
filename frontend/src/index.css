@@ -164,6 +164,24 @@ body {
   margin: 0; padding: 0;
 }
 
+html,
+body,
+#root {
+  width: 100%;
+  min-height: 100%;
+}
+
+html,
+body {
+  min-height: 100vh;
+  overflow-x: hidden;
+  background: #070b1a;
+}
+
+#root {
+  min-height: 100vh;
+}
+
 /* ─── Status dots ────────────────────────────────────────────────── */
 .status-online { background: #06D6A0; box-shadow: 0 0 8px rgba(6,214,160,0.6); }
 .status-offline { background: #FF4D6D; box-shadow: 0 0 8px rgba(255,77,109,0.6); }

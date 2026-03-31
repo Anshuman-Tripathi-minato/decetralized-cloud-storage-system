@@ -44,8 +44,20 @@ class InMemoryCollection:
         if operator == "$exists":
             has_value = len(doc_values) > 0
             return has_value if expected else not has_value
+        if operator == "$eq":
+            return any(value == expected for value in doc_values)
+        if operator == "$ne":
+            return all(value != expected for value in doc_values)
+        if operator == "$gt":
+            return any(value is not None and value > expected for value in doc_values)
         if operator == "$gte":
             return any(value is not None and value >= expected for value in doc_values)
+        if operator == "$lt":
+            return any(value is not None and value < expected for value in doc_values)
+        if operator == "$lte":
+            return any(value is not None and value <= expected for value in doc_values)
+        if operator == "$in":
+            return any(value in expected for value in doc_values)
         if operator == "$nin":
             return all(value not in expected for value in doc_values)
         return False
@@ -56,6 +68,16 @@ class InMemoryCollection:
             return True
 
         for key, condition in query.items():
+            if key == "$or":
+                if not isinstance(condition, list) or not any(cls._matches_query(doc, sub_query) for sub_query in condition):
+                    return False
+                continue
+
+            if key == "$and":
+                if not isinstance(condition, list) or not all(cls._matches_query(doc, sub_query) for sub_query in condition):
+                    return False
+                continue
+
             doc_values = cls._doc_values(doc, key)
 
             if isinstance(condition, dict):

@@ -111,13 +111,14 @@ export async function getStorageStatus() {
   return apiRequest('/storage/status');
 }
 
-export async function pledgeStorage(gigabytes, hostStoragePath, storageTargetLabel = null) {
+export async function pledgeStorage(gigabytes, hostStoragePath, storageTargetLabel = null, providerAgentUrl = null) {
   return apiRequest('/storage/pledge', {
     method: 'POST',
     body: JSON.stringify({
       gigabytes,
       host_storage_path: hostStoragePath,
       storage_target_label: storageTargetLabel,
+      provider_agent_url: providerAgentUrl,
     }),
   });
 }

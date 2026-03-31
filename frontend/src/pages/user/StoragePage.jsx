@@ -17,14 +17,33 @@ export default function StoragePage() {
   const [storagePermissionGranted, setStoragePermissionGranted] = useState(false);
   const [selectedStorageTarget, setSelectedStorageTarget] = useState('');
   const [dockerHostPath, setDockerHostPath] = useState('');
+  const [providerAgentUrl, setProviderAgentUrl] = useState('');
+
+  const isAbsolutePath = (path) => {
+    if (!path || !path.trim()) return false;
+    const value = path.trim();
+    return value.startsWith('/') || /^[a-zA-Z]:\\/.test(value) || value.startsWith('\\\\');
+  };
 
   useEffect(() => {
     const savedPermission = localStorage.getItem('storagePermissionGranted') === 'true';
     const savedTarget = localStorage.getItem('storagePermissionTarget') || '';
     const savedHostPath = localStorage.getItem('storageDockerHostPath') || '';
+    let savedProviderAgentUrl = localStorage.getItem('storageProviderAgentUrl') || '';
+    
+    // Auto-populate localhost provider agent for local development
+    if (!savedProviderAgentUrl) {
+      const isLocalhost = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
+      if (isLocalhost) {
+        savedProviderAgentUrl = 'http://localhost:8765';
+        localStorage.setItem('storageProviderAgentUrl', savedProviderAgentUrl);
+      }
+    }
+    
     setStoragePermissionGranted(savedPermission);
     setSelectedStorageTarget(savedTarget);
     setDockerHostPath(savedHostPath);
+    setProviderAgentUrl(savedProviderAgentUrl);
     loadStorageStatus();
   }, []);
 
@@ -54,14 +73,14 @@ export default function StoragePage() {
         localStorage.setItem('storagePermissionTarget', directoryHandle.name || 'Selected folder');
 
         if (!dockerHostPath) {
-          const suggestedPath = '/home/<user>/decentrastore-storage';
+          const suggestedPath = '/Users/<you>/decentrastore-storage (macOS)  or  C:\\Users\\<you>\\decentrastore-storage (Windows)';
           const enteredPath = window.prompt(
-            'Enter absolute folder path for Docker storage mount (server machine path):',
+            'Enter absolute folder path on your provider machine for Docker storage mount:',
             suggestedPath
           );
 
-          if (!enteredPath || !enteredPath.trim().startsWith('/')) {
-            throw new Error('Please provide an absolute Linux folder path (example: /home/minato/decentrastore-storage).');
+          if (!isAbsolutePath(enteredPath || '')) {
+            throw new Error('Please provide an absolute path (Linux/macOS: /home/... or /Users/... | Windows: C:\\Users\\...).');
           }
 
           const normalizedPath = enteredPath.trim();
@@ -87,14 +106,14 @@ export default function StoragePage() {
       localStorage.setItem('storagePermissionTarget', 'Browser storage');
 
       if (!dockerHostPath) {
-        const suggestedPath = '/home/<user>/decentrastore-storage';
+        const suggestedPath = '/Users/<you>/decentrastore-storage (macOS)  or  C:\\Users\\<you>\\decentrastore-storage (Windows)';
         const enteredPath = window.prompt(
-          'Enter absolute folder path for Docker storage mount (server machine path):',
+          'Enter absolute folder path on your provider machine for Docker storage mount:',
           suggestedPath
         );
 
-        if (!enteredPath || !enteredPath.trim().startsWith('/')) {
-          throw new Error('Please provide an absolute Linux folder path (example: /home/minato/decentrastore-storage).');
+        if (!isAbsolutePath(enteredPath || '')) {
+          throw new Error('Please provide an absolute path (Linux/macOS: /home/... or /Users/... | Windows: C:\\Users\\...).');
         }
 
         const normalizedPath = enteredPath.trim();
@@ -117,6 +136,10 @@ export default function StoragePage() {
       if (data.host_storage_path) {
         setDockerHostPath(data.host_storage_path);
         localStorage.setItem('storageDockerHostPath', data.host_storage_path);
+      }
+      if (data.provider_agent_url) {
+        setProviderAgentUrl(data.provider_agent_url);
+        localStorage.setItem('storageProviderAgentUrl', data.provider_agent_url);
       }
       if (data.storage_target_label) {
         setSelectedStorageTarget(data.storage_target_label);
@@ -158,8 +181,21 @@ export default function StoragePage() {
       }
     }
 
-    if (!dockerHostPath || !dockerHostPath.trim().startsWith('/')) {
+    if (!isAbsolutePath(dockerHostPath || '')) {
       setError('Please provide a valid absolute Docker storage folder path before pledging.');
+      return;
+    }
+
+    let normalizedProviderAgentUrl = (providerAgentUrl || '').trim();
+    
+    // Auto-use localhost for local development if empty
+    const isLocalhost = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
+    if (!normalizedProviderAgentUrl && isLocalhost) {
+      normalizedProviderAgentUrl = 'http://localhost:8765';
+    }
+    
+    if (!normalizedProviderAgentUrl) {
+      setError('Please provide provider agent URL (example: http://192.168.1.23:8765).');
       return;
     }
 
@@ -168,12 +204,18 @@ export default function StoragePage() {
       setError('');
       setSuccess('');
 
-      const result = await pledgeStorage(storageGB, dockerHostPath.trim(), selectedStorageTarget || null);
+      const result = await pledgeStorage(
+        storageGB,
+        dockerHostPath.trim(),
+        selectedStorageTarget || null,
+        normalizedProviderAgentUrl
+      );
 
       setSuccess(
         `Successfully pledged ${storageGB} GB! Container mounted at ${result?.host_storage_path || dockerHostPath.trim()}${result?.container?.quota_enforced ? ' with hard quota enabled.' : '.'}`
       );
       setCurrentPledge(currentPledge + storageGB);
+      localStorage.setItem('storageProviderAgentUrl', normalizedProviderAgentUrl);
 
       // Reload status and container info
       setTimeout(() => {
@@ -387,6 +429,30 @@ export default function StoragePage() {
 
           <div className="mb-6">
             <label className={`block text-sm font-medium mb-2 ${isDark ? 'text-white/60' : 'text-gray-600'}`}>
+              Provider Node Agent URL
+            </label>
+            <input
+              type="text"
+              value={providerAgentUrl}
+              onChange={(e) => {
+                const value = e.target.value;
+                setProviderAgentUrl(value);
+                localStorage.setItem('storageProviderAgentUrl', value);
+              }}
+              placeholder="http://192.168.1.20:8765"
+              className={`w-full px-4 py-3 rounded-xl border text-sm font-mono mb-2 ${
+                isDark
+                  ? 'bg-white/5 border-white/10 text-white placeholder:text-white/40'
+                  : 'bg-white border-gray-200 text-gray-900 placeholder:text-gray-400'
+              }`}
+            />
+            <p className={`mt-1 text-xs ${isDark ? 'text-white/40' : 'text-gray-500'}`}>
+              Run Node Agent on provider machine and enter reachable URL (Linux/Windows/macOS).
+            </p>
+          </div>
+
+          <div className="mb-6">
+            <label className={`block text-sm font-medium mb-2 ${isDark ? 'text-white/60' : 'text-gray-600'}`}>
               Docker Storage Folder (absolute path)
             </label>
             <input
@@ -405,7 +471,7 @@ export default function StoragePage() {
               }`}
             />
             <p className={`mt-2 text-xs ${isDark ? 'text-white/40' : 'text-gray-500'}`}>
-              This is the folder on the machine running Docker/backend where encrypted data will be mounted and stored.
+              This is the folder on the provider machine where Docker container mounts and stores encrypted chunks.
             </p>
           </div>
 

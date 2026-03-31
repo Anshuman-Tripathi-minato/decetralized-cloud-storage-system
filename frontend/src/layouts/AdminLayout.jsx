@@ -46,7 +46,7 @@ export default function AdminLayout() {
   };
 
   return (
-    <div className={`flex h-screen overflow-hidden ${isDark ? 'text-white' : 'text-gray-900'}`}
+    <div className={`flex h-screen w-full overflow-hidden ${isDark ? 'text-white' : 'text-gray-900'}`}
       style={{
         background: isDark
           ? 'linear-gradient(-45deg,#0a0a1e,#0d0a2a,#0a1020,#0e0a1e)'
@@ -224,7 +224,7 @@ export default function AdminLayout() {
         </header>
 
         {/* Page content */}
-        <main className="flex-1 overflow-y-auto p-6">
+        <main className="flex-1 overflow-y-auto overflow-x-hidden p-6">
           <Outlet />
         </main>
       </div>

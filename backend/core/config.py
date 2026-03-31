@@ -32,6 +32,9 @@ class Settings(BaseSettings):
     ADMIN_USERNAME: str = "admin"
     ADMIN_PASSWORD: str = "DecentraAdmin@2026"
     CORS_ORIGINS: str = "http://localhost:5173,http://127.0.0.1:5173"
+    NODE_AGENT_DEFAULT_PORT: int = 8765
+    NODE_AGENT_TIMEOUT_SEC: int = 10
+    NODE_AGENT_SHARED_TOKEN: str = ""
 
     @property
     def cors_origins_list(self) -> List[str]:

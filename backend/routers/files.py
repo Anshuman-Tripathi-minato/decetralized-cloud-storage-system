@@ -5,6 +5,7 @@ from typing import Optional
 from datetime import datetime
 from backend.core.security import get_current_user
 from backend.core.database import get_db
+from backend.services.provider_agent_service import get_provider_agent_service
 import base64
 
 router = APIRouter()
@@ -22,27 +23,36 @@ class FileMetadata(BaseModel):
     iv: str  # Base64 encoded initialization vector
 
 
-async def _resolve_storage_nodes(db, owner_node_id: str, max_nodes: int = 3):
-    """Choose active storage nodes that hold file replicas and include owner fallback."""
+async def _resolve_storage_nodes(
+    db,
+    owner_node_id: str,
+    max_nodes: int = 3,
+    include_owner_fallback: bool = False,
+):
+    """Choose active storage nodes for replicas, excluding uploader unless fallback is requested."""
     projection = {
         "_id": 0,
         "node_id": 1,
         "ip_address": 1,
+        "provider_agent_url": 1,
         "region": 1,
         "is_active": 1,
     }
 
-    cursor = db.users.find(
-        {
-            "is_active": True,
-            "$or": [
-                {"is_storage_node": True},
-                {"storage_pledged": {"$gt": 0}},
-                {"storage_pledged_gb": {"$gt": 0}},
-            ],
-        },
-        projection,
-    ).limit(50)
+    query = {
+        "is_active": True,
+        "provider_agent_url": {"$exists": True, "$ne": None},
+        "container_id": {"$exists": True, "$ne": None},
+        "$or": [
+            {"is_storage_node": True},
+            {"storage_pledged": {"$gt": 0}},
+            {"storage_pledged_gb": {"$gt": 0}},
+        ],
+    }
+    if owner_node_id:
+        query["node_id"] = {"$nin": [owner_node_id]}
+
+    cursor = db.users.find(query, projection).limit(50)
 
     selected_nodes = []
     seen = set()
@@ -53,6 +63,7 @@ async def _resolve_storage_nodes(db, owner_node_id: str, max_nodes: int = 3):
         selected_nodes.append({
             "node_id": node_id,
             "ip_address": node.get("ip_address") or "N/A",
+            "provider_agent_url": node.get("provider_agent_url"),
             "region": node.get("region") or "Unknown",
             "is_active": bool(node.get("is_active", True)),
         })
@@ -60,12 +71,13 @@ async def _resolve_storage_nodes(db, owner_node_id: str, max_nodes: int = 3):
         if len(selected_nodes) >= max_nodes:
             break
 
-    if owner_node_id and owner_node_id not in seen:
+    if include_owner_fallback and owner_node_id and owner_node_id not in seen:
         owner_doc = await db.users.find_one({"node_id": owner_node_id}, projection)
         if owner_doc:
             selected_nodes.insert(0, {
                 "node_id": owner_doc.get("node_id"),
                 "ip_address": owner_doc.get("ip_address") or "N/A",
+                "provider_agent_url": owner_doc.get("provider_agent_url"),
                 "region": owner_doc.get("region") or "Unknown",
                 "is_active": bool(owner_doc.get("is_active", True)),
             })
@@ -89,7 +101,12 @@ async def _hydrate_file_storage_nodes(db, file_doc: dict, max_nodes: int = 3):
     # Last fallback: show owner node so UI can still display at least one destination node.
     owner_node_id = file_doc.get("owner_node_id")
     if owner_node_id:
-        owner_nodes = await _resolve_storage_nodes(db, owner_node_id=owner_node_id, max_nodes=1)
+        owner_nodes = await _resolve_storage_nodes(
+            db,
+            owner_node_id=owner_node_id,
+            max_nodes=1,
+            include_owner_fallback=True,
+        )
         if owner_nodes:
             return owner_nodes
 
@@ -111,7 +128,17 @@ async def upload_file_metadata(
     if existing:
         raise HTTPException(status_code=409, detail="File with this CID already exists")
 
-    storage_nodes = await _resolve_storage_nodes(db, current_user["sub"], max_nodes=3)
+    storage_nodes = await _resolve_storage_nodes(
+        db,
+        owner_node_id=current_user["sub"],
+        max_nodes=3,
+        include_owner_fallback=False,
+    )
+    if not storage_nodes:
+        raise HTTPException(
+            status_code=409,
+            detail="No remote active storage nodes available. Ask other nodes to pledge storage first.",
+        )
 
     file_doc = {
         "cid": file_metadata.cid,
@@ -165,8 +192,55 @@ async def upload_chunk(
     chunk_data = await chunk.read()
     chunk_data_b64 = base64.b64encode(chunk_data).decode('utf-8')
 
-    # Store chunk
+    # Store chunk and replicate to provider agents.
     file_storage_nodes = file_doc.get("storage_nodes") or []
+    provider_agent_service = get_provider_agent_service()
+    replica_results = []
+
+    if not file_storage_nodes:
+        raise HTTPException(status_code=409, detail="No storage providers mapped for this file")
+
+    for replica in file_storage_nodes:
+        target_node_id = replica.get("node_id")
+        agent_url = provider_agent_service.normalize_agent_url(replica.get("provider_agent_url"))
+        if not target_node_id or not agent_url:
+            replica_results.append({
+                "node_id": target_node_id or "unknown",
+                "status": "failed",
+                "detail": "Missing provider_agent_url",
+            })
+            continue
+
+        try:
+            write_result = await provider_agent_service.write_chunk(
+                agent_url=agent_url,
+                node_id=target_node_id,
+                cid=cid,
+                chunk_id=chunk_id,
+                chunk_index=chunk_index,
+                chunk_hash=chunk_hash,
+                data_b64=chunk_data_b64,
+            )
+            replica_results.append({
+                "node_id": target_node_id,
+                "agent_url": agent_url,
+                "status": "stored",
+                "path": write_result.get("path"),
+            })
+        except Exception as replica_error:
+            replica_results.append({
+                "node_id": target_node_id,
+                "agent_url": agent_url,
+                "status": "failed",
+                "detail": str(replica_error),
+            })
+
+    successful_replicas = [r for r in replica_results if r.get("status") == "stored"]
+    if not successful_replicas:
+        raise HTTPException(
+            status_code=503,
+            detail="Chunk replication failed on all provider nodes. Ensure provider agents are running.",
+        )
 
     chunk_doc = {
         "chunk_id": chunk_id,
@@ -177,6 +251,7 @@ async def upload_chunk(
         "size": len(chunk_data),
         "uploaded_at": datetime.utcnow(),
         "replicas": file_storage_nodes,
+        "replica_results": replica_results,
     }
 
     # Check if chunk already exists
@@ -204,6 +279,7 @@ async def upload_chunk(
         "chunk_id": chunk_id,
         "chunk_index": chunk_index,
         "status": "uploaded",
+        "replicas_stored": len(successful_replicas),
         "file_complete": is_complete,
     }
 
