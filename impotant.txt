@@ -1,5 +1,9 @@
 source "/home/minato/Desktop/decetralized cloud storage system/.venv/bin/activate"
 
+
+source .venv/bin/activate && uvicorn provider_agent.agent:app --host 0.0.0.0 --port 8765
+
+
 ./start.sh
 
 killall -9 python uvicorn node npm
