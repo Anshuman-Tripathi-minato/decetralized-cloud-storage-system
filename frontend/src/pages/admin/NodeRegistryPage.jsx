@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { Server, Shield, ShieldOff, Search, CheckCircle2, XCircle, AlertCircle, Ban } from 'lucide-react';
 import { useTheme } from '../../context/ThemeContext';
 import { getAdminNodes, banNode } from '../../utils/api';
+import { formatUtcTimestamp } from '../../utils/time';
 
 export default function NodeRegistryPage() {
   const { isDark } = useTheme();
@@ -290,7 +291,7 @@ export default function NodeRegistryPage() {
                     <td className="p-4">
                       <span className={`text-xs ${isDark ? 'text-white/60' : 'text-gray-600'}`}>
                         {node.registered_at 
-                          ? new Date(node.registered_at).toLocaleString() 
+                          ? `${formatUtcTimestamp(node.registered_at)} UTC` 
                           : 'N/A'
                         }
                       </span>

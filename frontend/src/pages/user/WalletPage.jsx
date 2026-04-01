@@ -2,11 +2,12 @@ import { useState, useEffect } from 'react';
 import { Coins, TrendingUp, TrendingDown, Clock, Award, Filter, Download, Upload as UploadIcon } from 'lucide-react';
 import { useTheme } from '../../context/ThemeContext';
 import { useAuth } from '../../context/AuthContext';
-import { getMe } from '../../utils/api';
+import { getMe, getMyTransactions } from '../../utils/api';
+import { formatUtcTimestamp } from '../../utils/time';
 
 export default function WalletPage() {
   const { isDark } = useTheme();
-  const { user } = useAuth();
+  const { user, login, token } = useAuth();
 
   const [balance, setBalance] = useState(0);
   const [transactions, setTransactions] = useState([]);
@@ -20,11 +21,33 @@ export default function WalletPage() {
   const loadWalletData = async () => {
     try {
       setLoading(true);
-      const data = await getMe();
-      setBalance(data.token_balance || 0);
-      // TODO: Fetch real transactions from API when endpoint is available
-      // For now, show empty state until backend provides transaction history
-      setTransactions([]);
+      const [profile, txPayload] = await Promise.all([
+        getMe(),
+        getMyTransactions(100),
+      ]);
+
+      const numericBalance = Number(profile?.token_balance ?? 0);
+      setBalance(Number.isFinite(numericBalance) ? numericBalance : 0);
+
+      if (token && user) {
+        login(
+          {
+            ...user,
+            token_balance: Number.isFinite(numericBalance) ? numericBalance : 0,
+          },
+          token
+        );
+      }
+
+      const txs = (txPayload?.transactions || []).map((tx, index) => ({
+        id: `${tx.timestamp || 'tx'}-${index}`,
+        type: tx.type || 'earn',
+        amount: Number(tx.amount || 0),
+        description: tx.description || 'Transaction',
+        category: tx.category || 'general',
+        time: tx.timestamp ? formatUtcTimestamp(tx.timestamp) + ' UTC' : 'Just now',
+      }));
+      setTransactions(txs);
     } catch (err) {
       console.error('Failed to load wallet:', err);
     } finally {

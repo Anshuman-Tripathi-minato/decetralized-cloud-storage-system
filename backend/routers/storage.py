@@ -7,6 +7,7 @@ from backend.core.security import get_current_user
 from backend.core.database import get_db
 from backend.services.docker_service import get_docker_service
 from backend.services.provider_agent_service import get_provider_agent_service
+from backend.services.token_service import AST_DAILY_EARN_PER_GB, apply_daily_storage_rewards
 from backend.core.config import settings
 
 router = APIRouter()
@@ -30,6 +31,8 @@ async def storage_status(current_user: dict = Depends(get_current_user)):
     user = await db.users.find_one({"node_id": current_user["sub"]})
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
+
+    user, daily_reward = await apply_daily_storage_rewards(db, user)
 
     # Get file statistics
     files_count = await db.files.count_documents({"owner_node_id": current_user["sub"]})
@@ -72,6 +75,8 @@ async def storage_status(current_user: dict = Depends(get_current_user)):
         "total_uploaded_size": total_uploaded_size,
         "chunks_stored": chunks_count,
         "token_balance": user.get("token_balance", 0.0),
+        "daily_reward_rate_per_gb": AST_DAILY_EARN_PER_GB,
+        "daily_reward_applied_ast": daily_reward,
         "is_active": user.get("is_active", True),
         "container_running": container_running,
         "container_id": user.get("container_id"),
@@ -110,10 +115,8 @@ async def pledge_storage(
     new_pledge = current_pledge + storage_bytes
     total_pledge_gb = int(new_pledge / (1024 * 1024 * 1024))
 
-    # Calculate token reward (0.5 AST per GB pledged)
-    reward = req.gigabytes * 0.5
-    current_balance = user.get("token_balance", 0.0)
-    new_balance = current_balance + reward
+    user, daily_reward = await apply_daily_storage_rewards(db, user)
+    current_balance = float(user.get("token_balance", 0.0) or 0.0)
 
     selected_host_path = (req.host_storage_path or user.get("host_storage_path") or "").strip()
     if not selected_host_path:
@@ -180,7 +183,6 @@ async def pledge_storage(
 
     update_data = {
         "storage_pledged": new_pledge,
-        "token_balance": new_balance,
         "last_pledge_at": datetime.utcnow(),
         "host_storage_path": selected_host_path,
         "storage_target_label": req.storage_target_label,
@@ -203,16 +205,6 @@ async def pledge_storage(
         {"node_id": current_user["sub"]},
         {"$set": update_data}
     )
-
-    # Record token transaction
-    await db.token_transactions.insert_one({
-        "node_id": current_user["sub"],
-        "type": "earn",
-        "amount": reward,
-        "description": f"Storage pledge: {req.gigabytes} GB",
-        "category": "storage",
-        "timestamp": datetime.utcnow(),
-    })
 
     # Record container creation in database
     container_doc = {
@@ -242,9 +234,14 @@ async def pledge_storage(
     return {
         "pledged_gb": req.gigabytes,
         "total_pledge_gb": new_pledge / (1024 * 1024 * 1024),
-        "reward_ast": reward,
-        "new_balance": new_balance,
-        "message": f"Successfully pledged {req.gigabytes} GB. Earned {reward} AST!",
+        "reward_ast": 0.0,
+        "daily_reward_applied_ast": daily_reward,
+        "daily_reward_rate_per_gb": AST_DAILY_EARN_PER_GB,
+        "new_balance": current_balance,
+        "message": (
+            f"Successfully pledged {req.gigabytes} GB. "
+            f"You now earn {AST_DAILY_EARN_PER_GB} AST per GB per day."
+        ),
         "host_storage_path": selected_host_path,
         "provider_agent_url": normalized_agent_url,
         "container": container_result,

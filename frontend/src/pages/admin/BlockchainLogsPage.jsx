@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { FileText, Filter, Search, Clock, CheckCircle2, XCircle, AlertCircle } from 'lucide-react';
 import { useTheme } from '../../context/ThemeContext';
 import { getBlockchainLogs, getBlockchainLog } from '../../utils/api';
+import { formatUtcTimestamp } from '../../utils/time';
 
 export default function BlockchainLogsPage() {
   const { isDark } = useTheme();
@@ -254,7 +255,7 @@ export default function BlockchainLogsPage() {
                         <div className="flex items-center gap-1">
                           <Clock size={12} className={isDark ? 'text-white/40' : 'text-gray-400'} />
                           <span className={`text-xs ${isDark ? 'text-white/60' : 'text-gray-600'}`}>
-                            {new Date(log.timestamp).toLocaleTimeString()}
+                            {formatUtcTimestamp(log.timestamp)} UTC
                           </span>
                         </div>
                       </td>
@@ -343,7 +344,7 @@ export default function BlockchainLogsPage() {
                   <p className={`text-xs mb-1 ${isDark ? 'text-white/40' : 'text-gray-500'}`}>
                     Timestamp
                   </p>
-                  <p className="text-sm">{new Date(selectedLog.timestamp).toLocaleString()}</p>
+                  <p className="text-sm">{formatUtcTimestamp(selectedLog.timestamp)} UTC</p>
                 </div>
               </div>
             </div>

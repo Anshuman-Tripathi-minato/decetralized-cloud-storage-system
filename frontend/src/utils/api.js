@@ -105,6 +105,10 @@ export async function getMe() {
   return apiRequest('/auth/me');
 }
 
+export async function getMyTransactions(limit = 100) {
+  return apiRequest(`/auth/transactions?limit=${limit}`);
+}
+
 // ── Storage Endpoints ─────────────────────────────────────────────────
 
 export async function getStorageStatus() {

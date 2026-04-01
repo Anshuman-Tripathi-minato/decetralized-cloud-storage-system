@@ -96,6 +96,22 @@ class ProviderAgentService:
             response.raise_for_status()
             return response.json()
 
+    async def delete_file_chunks(
+        self,
+        agent_url: str,
+        node_id: str,
+        cid: str,
+    ) -> Dict[str, Any]:
+        endpoint = f"{agent_url}/agent/storage/chunks/delete"
+        payload = {
+            "node_id": node_id,
+            "cid": cid,
+        }
+        async with httpx.AsyncClient(timeout=self.timeout) as client:
+            response = await client.post(endpoint, json=payload, headers=self._headers())
+            response.raise_for_status()
+            return response.json()
+
 
 _provider_agent_service: Optional[ProviderAgentService] = None
 

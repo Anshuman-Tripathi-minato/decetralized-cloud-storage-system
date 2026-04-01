@@ -41,6 +41,11 @@ class ChunkWriteRequest(BaseModel):
     data_b64: str
 
 
+class ChunkDeleteRequest(BaseModel):
+    node_id: str
+    cid: str
+
+
 class AgentDockerService:
     def __init__(self) -> None:
         self.client = self._build_client()
@@ -231,4 +236,31 @@ async def write_chunk(req: ChunkWriteRequest, x_node_agent_token: Optional[str] 
         "status": "stored",
         "path": host_chunk_path,
         "size": len(raw_data),
+    }
+
+
+@app.post("/agent/storage/chunks/delete")
+async def delete_file_chunks(req: ChunkDeleteRequest, x_node_agent_token: Optional[str] = Header(default=None)):
+    require_auth(x_node_agent_token)
+
+    service = get_service()
+    container_name = service.container_name(req.node_id)
+    try:
+        container = service.client.containers.get(container_name)
+    except docker.errors.NotFound:
+        raise HTTPException(status_code=409, detail="Node container is not running on provider machine")
+
+    safe_cid = re.sub(r"[^a-zA-Z0-9_.-]", "", req.cid)
+    if not safe_cid:
+        raise HTTPException(status_code=400, detail="Invalid cid")
+
+    target_dir = f"/storage/chunks/{safe_cid}"
+    exec_result = container.exec_run(["sh", "-c", f"rm -rf {target_dir}"])
+    if exec_result.exit_code not in (0, None):
+        raise HTTPException(status_code=500, detail="Failed to delete chunks from provider container")
+
+    return {
+        "status": "deleted",
+        "cid": req.cid,
+        "node_id": req.node_id,
     }

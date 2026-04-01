@@ -282,6 +282,17 @@ class InMemoryCollection:
                 return type('obj', (object,), {'deleted_count': 1})
         return type('obj', (object,), {'deleted_count': 0})
 
+    async def delete_many(self, query):
+        remaining = []
+        deleted_count = 0
+        for doc in self.documents:
+            if self._matches_query(doc, query):
+                deleted_count += 1
+            else:
+                remaining.append(doc)
+        self.documents = remaining
+        return type('obj', (object,), {'deleted_count': deleted_count})
+
     async def count_documents(self, query=None):
         if query is None:
             return len(self.documents)

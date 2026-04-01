@@ -5,6 +5,7 @@ import { useTheme } from '../../context/ThemeContext';
 import { useAuth } from '../../context/AuthContext';
 import { listFiles, getFileMetadata, retrieveFileChunks, deleteFile } from '../../utils/api';
 import { importAESKey, decryptFile, downloadFile as downloadDecryptedFile, formatBytes } from '../../utils/fileEncryption';
+import { formatUtcDate } from '../../utils/time';
 
 export default function FilesPage() {
   const { isDark } = useTheme();
@@ -190,7 +191,7 @@ export default function FilesPage() {
                         Encrypted
                       </span>
                       <span className={isDark ? 'text-white/40' : 'text-gray-400'}>
-                        {new Date(file.uploaded_at).toLocaleDateString()}
+                        {formatUtcDate(file.uploaded_at)} UTC
                       </span>
                       <span className={`font-mono ${isDark ? 'text-white/30' : 'text-gray-300'}`}>
                         {file.total_chunks} chunks

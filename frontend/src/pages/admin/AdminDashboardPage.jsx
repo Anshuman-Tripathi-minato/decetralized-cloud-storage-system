@@ -5,6 +5,7 @@ import {
 } from 'lucide-react';
 import { useTheme } from '../../context/ThemeContext';
 import { getAdminStats, getBlockchainLogs, getPeers, getNetworkMetrics, getAdminStorageDistribution } from '../../utils/api';
+import { formatUtcTimestamp } from '../../utils/time';
 
 export default function AdminDashboardPage() {
   const { isDark } = useTheme();
@@ -172,7 +173,7 @@ export default function AdminDashboardPage() {
   const recentEvents = (events || []).map(event => ({
     type: event.event_type || 'event',
     description: event.description || event.details || 'Unknown event',
-    time: event.timestamp ? new Date(event.timestamp).toLocaleString() : 'Unknown',
+    time: event.timestamp ? `${formatUtcTimestamp(event.timestamp)} UTC` : 'Unknown',
     status: event.status || 'success',
   }));
 

@@ -25,6 +25,7 @@ export default function RegisterPage() {
   const [fingerprint, setFingerprint] = useState('');
   const [keystore, setKeystore] = useState(null);
   const [error, setError] = useState('');
+  const [signupRewardAmount, setSignupRewardAmount] = useState(50);
 
   const handleGenerateKeys = async () => {
     try {
@@ -79,15 +80,17 @@ export default function RegisterPage() {
       // Save auth state
       login({
         node_id: response.node_id,
-        token_balance: 0.0,
+        token_balance: response.token_balance || 50.0,
       }, response.access_token);
+
+      setSignupRewardAmount(response.token_balance || 50.0);
 
       setStep('complete');
       
-      // Redirect to dashboard after 2 seconds
+      // Keep success view visible long enough for reward animation.
       setTimeout(() => {
         navigate('/app/dashboard');
-      }, 2000);
+      }, 3200);
     } catch (err) {
       setError(`Registration failed: ${err.message}`);
       setStep('ready');
@@ -276,6 +279,21 @@ export default function RegisterPage() {
             <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-green-500/10 border border-green-500/20 text-green-400 text-sm font-semibold">
               <span className="w-2 h-2 rounded-full status-online" />
               Node Active
+            </div>
+
+            <div className="mt-8 mx-auto max-w-md animate-[fadeIn_0.35s_ease-out]">
+              <div className={`relative overflow-hidden rounded-2xl border-2 p-5 text-left shadow-2xl animate-pulse ${
+                isDark
+                  ? 'bg-gradient-to-r from-amber-500/20 to-yellow-500/20 border-amber-400/40'
+                  : 'bg-gradient-to-r from-amber-100 to-yellow-100 border-amber-300'
+              }`}>
+                <div className="absolute top-0 right-0 h-full w-12 bg-white/20" />
+                <p className="text-xs uppercase tracking-[0.18em] font-bold opacity-70 mb-2">Reward Unlocked</p>
+                <p className="text-2xl font-black mb-1">You Earned {signupRewardAmount.toFixed(0)} AST Coins</p>
+                <p className={`text-xs ${isDark ? 'text-white/70' : 'text-gray-600'}`}>
+                  Welcome bonus added to your wallet.
+                </p>
+              </div>
             </div>
           </div>
         )}

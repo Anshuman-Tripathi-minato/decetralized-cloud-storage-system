@@ -13,7 +13,7 @@ import { uploadFileMetadata, uploadChunk } from '../../utils/api';
 
 export default function UploadPage() {
   const { isDark } = useTheme();
-  const { user } = useAuth();
+  const { user, login, token } = useAuth();
   const navigate = useNavigate();
   const fileInputRef = useRef(null);
 
@@ -24,6 +24,10 @@ export default function UploadPage() {
   const [uploadedCID, setUploadedCID] = useState('');
   const [encryptionProgress, setEncryptionProgress] = useState(0);
   const [chunkProgress, setChunkProgress] = useState({ current: 0, total: 0 });
+
+  const uploadCostAst = selectedFile
+    ? ((selectedFile.size / (1024 * 1024)) * 0.5).toFixed(4)
+    : '0.0000';
 
   const handleFileSelect = (file) => {
     if (!file) return;
@@ -77,7 +81,17 @@ export default function UploadPage() {
       setChunkProgress({ current: 0, total: encryptedChunks.length });
 
       // Upload file metadata first
-      await uploadFileMetadata(cid, metadata, keyB64, iv);
+      const metadataResponse = await uploadFileMetadata(cid, metadata, keyB64, iv);
+
+      if (token && user) {
+        login(
+          {
+            ...user,
+            token_balance: metadataResponse?.token_balance ?? user.token_balance ?? 0,
+          },
+          token
+        );
+      }
 
       // Upload chunks sequentially
       for (let i = 0; i < encryptedChunks.length; i++) {
@@ -191,6 +205,9 @@ export default function UploadPage() {
                   <div className="flex items-start gap-2">
                     <Shield size={16} className="text-blue-400 shrink-0 mt-0.5" />
                     <div className="text-xs space-y-1">
+                      <p className={`${isDark ? 'text-white/60' : 'text-gray-600'}`}>
+                        <strong>Upload Pricing:</strong> 1 MB = 0.5 AST. Estimated cost for this file: {uploadCostAst} AST.
+                      </p>
                       <p className={`${isDark ? 'text-white/60' : 'text-gray-600'}`}>
                         <strong>Client-Side Encryption:</strong> Your file will be encrypted locally with AES-256-GCM before upload.
                       </p>

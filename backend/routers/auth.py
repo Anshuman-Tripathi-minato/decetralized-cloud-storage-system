@@ -8,6 +8,7 @@ from datetime import datetime
 from backend.core.security import create_access_token, get_current_user
 from backend.core.config import settings
 from backend.core.database import get_db
+from backend.services.token_service import AST_SIGNUP_BONUS, apply_daily_storage_rewards, ensure_signup_bonus, reconcile_balance_from_transactions
 from passlib.context import CryptContext
 
 router = APIRouter()
@@ -40,6 +41,9 @@ class TokenResponse(BaseModel):
     token_type: str = "bearer"
     node_id: str
     role: str
+    token_balance: float = 0.0
+    show_signup_reward_animation: bool = False
+    signup_reward_amount: float = 0.0
 
 
 # ── Endpoints ─────────────────────────────────────────────────────────
@@ -68,16 +72,27 @@ async def register_node(req: NodeRegisterRequest):
         "public_key": req.public_key,
         "public_key_fingerprint": req.public_key_fingerprint,
         "keystore_encrypted": req.keystore_encrypted,
-        "token_balance": 0.0,
+        "token_balance": AST_SIGNUP_BONUS,
+        "signup_reward_notified": False,
         "storage_pledged_gb": 0,
         "storage_used_gb": 0.0,
         "is_active": True,
         "registered_at": datetime.utcnow(),
+        "last_storage_reward_at": datetime.utcnow(),
         "last_seen": datetime.utcnow(),
         "uptime_score": 0.0,
     }
 
     await db.users.insert_one(user_doc)
+
+    await db.token_transactions.insert_one({
+        "node_id": req.node_id,
+        "type": "earn",
+        "amount": AST_SIGNUP_BONUS,
+        "description": "Signup reward",
+        "category": "signup",
+        "timestamp": datetime.utcnow(),
+    })
 
     # Log to blockchain
     await _log_blockchain_event(db, "NODE_REGISTERED", req.node_id, {
@@ -85,7 +100,12 @@ async def register_node(req: NodeRegisterRequest):
     })
 
     token = create_access_token({"sub": req.node_id, "role": "user", "fingerprint": req.public_key_fingerprint})
-    return TokenResponse(access_token=token, node_id=req.node_id, role="user")
+    return TokenResponse(
+        access_token=token,
+        node_id=req.node_id,
+        role="user",
+        token_balance=AST_SIGNUP_BONUS,
+    )
 
 
 @router.post("/login", response_model=TokenResponse)
@@ -114,6 +134,17 @@ async def login_node(req: NodeLoginRequest):
     if not is_valid:
         raise HTTPException(status_code=401, detail="Invalid signature")
 
+    user, _ = await ensure_signup_bonus(db, user)
+    user, _ = await apply_daily_storage_rewards(db, user)
+    user, reconciled_balance = await reconcile_balance_from_transactions(db, user)
+    show_signup_reward_animation = not bool(user.get("signup_reward_notified", False))
+
+    if show_signup_reward_animation:
+        await db.users.update_one(
+            {"node_id": req.node_id},
+            {"$set": {"signup_reward_notified": True}}
+        )
+
     # Update last seen
     await db.users.update_one(
         {"node_id": req.node_id},
@@ -128,7 +159,10 @@ async def login_node(req: NodeLoginRequest):
     return TokenResponse(
         access_token=token,
         node_id=req.node_id,
-        role="user"
+        role="user",
+        token_balance=reconciled_balance,
+        show_signup_reward_animation=show_signup_reward_animation,
+        signup_reward_amount=AST_SIGNUP_BONUS if show_signup_reward_animation else 0.0,
     )
 
 
@@ -158,7 +192,36 @@ async def get_me(current_user: dict = Depends(get_current_user)):
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
 
+    user, _ = await ensure_signup_bonus(db, user)
+    user, _ = await apply_daily_storage_rewards(db, user)
+    user, _ = await reconcile_balance_from_transactions(db, user)
+
     return user
+
+
+@router.get("/transactions")
+async def get_my_transactions(
+    limit: int = 50,
+    current_user: dict = Depends(get_current_user),
+):
+    """Return token transactions for current user."""
+    db = get_db()
+    if db is None:
+        raise HTTPException(status_code=503, detail="Database unavailable")
+
+    safe_limit = min(max(limit, 1), 200)
+    cursor = db.token_transactions.find(
+        {"node_id": current_user["sub"]},
+        {"_id": 0},
+    ).sort("timestamp", -1).limit(safe_limit)
+
+    txs = await cursor.to_list(length=safe_limit)
+    for tx in txs:
+        ts = tx.get("timestamp")
+        if isinstance(ts, datetime):
+            tx["timestamp"] = ts.isoformat()
+
+    return {"transactions": txs}
 
 
 # ── Helper ────────────────────────────────────────────────────────────
