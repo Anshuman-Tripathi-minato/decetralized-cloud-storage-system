@@ -5,6 +5,9 @@ A decentralized cloud storage prototype with:
 - client-side AES-256-GCM file encryption
 - chunked file upload and retrieval
 - storage pledging with AST token rewards
+- upload charging at `1 MB = 0.5 AST`
+- storage-hosting rewards distributed to nodes that store chunks
+- signup bonus of `50 AST` on first registration
 - provider-agent Docker containers on provider machines
 - admin observability for nodes, files, network, and blockchain logs
 
@@ -21,6 +24,7 @@ All core sprint features are implemented in the current codebase:
 - user dashboard distribution summary (nodes storing user data)
 - notification bell popovers in both user and admin layouts
 - resilient local startup script with health-check retries
+- blockchain logs normalized by category for admin charts and filters
 
 ## Tech Stack
 
@@ -122,10 +126,10 @@ Notes:
 Set `frontend/.env`:
 
 ```env
-VITE_API_URL=http://localhost:8000
+VITE_API_URL=/api
 ```
 
-If omitted, frontend auto-uses localhost API when running on localhost.
+If omitted, frontend uses the local Vite `/api` proxy when running on localhost and the deployed API root in production.
 
 ## Authentication Flows
 
@@ -180,6 +184,16 @@ Current behavior:
 - chunk records include replica metadata
 - encrypted chunks are pushed to provider agent endpoints for provider-side storage
 - fallback hydration for old records without `storage_nodes`
+- upload fee is charged once at metadata creation and shared with successful storage-node replicas
+- provider storage nodes receive `upload_hosting` rewards in wallet history
+- deleting a file removes all chunks from provider nodes and from the database
+
+### AST Economics
+
+- Upload cost: `1 MB = 0.5 AST`
+- Signup reward: `50 AST`
+- Storage hosting reward: split from upload fees among nodes that successfully store chunks
+- Daily storage reward: `0.5 AST per GB per day`
 
 ## Admin Observability
 
@@ -209,10 +223,18 @@ Admin dashboard includes:
 - `GET /api/blockchain/logs/{tx_hash}`
 - `GET /api/blockchain/stats`
 
+Blockchain log categories in the admin UI:
+- `register`
+- `upload`
+- `download`
+- `pledge`
+- `reward`
+- `delete`
+
 ## Local Troubleshooting
 
 ### 1) Frontend shows `ERR_NAME_NOT_RESOLVED` or `Failed to fetch`
-- ensure `frontend/.env` has `VITE_API_URL=http://localhost:8000`
+- ensure `frontend/.env` has `VITE_API_URL=/api`
 - restart frontend after env changes
 - hard refresh browser
 
@@ -220,17 +242,22 @@ Admin dashboard includes:
 - check backend logs first; many "CORS" messages are secondary to server exceptions
 - inspect `/tmp/decentrastore-backend.log`
 
-### 3) User sees `User not found` after restart
+### 3) Upload still fails on localhost
+- restart the Vite dev server after changing `frontend/.env`
+- confirm the browser request goes to `http://localhost:5173/api/files/upload`
+- if the request still targets `http://localhost:8000`, clear browser cache and hard refresh
+
+### 4) User sees `User not found` after restart
 - in-memory DB mode does not persist users across restart
 - register/login again to create fresh session
 
-### 4) Docker container creation fails
+### 5) Docker container creation fails
 - confirm Docker daemon is running
 - ensure provider agent is running on provider machine and reachable
 - verify provider agent URL in storage page is correct
 - verify provider machine host path is absolute and writable
 
-### 5) Storage page says `Please provide provider agent URL`
+### 6) Storage page says `Please provide provider agent URL`
 - run provider agent first on provider machine (port `8765`)
 - use reachable URL in UI (example `http://<provider-ip>:8765`)
 - for same machine local testing, use `http://localhost:8765`
