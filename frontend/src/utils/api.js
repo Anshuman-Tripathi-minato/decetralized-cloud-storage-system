@@ -8,6 +8,11 @@ function normalizeApiRoot(rawValue) {
   const value = (rawValue || '').trim();
   if (!value) return '';
 
+  const isLocalBrowser = ['localhost', '127.0.0.1'].includes(window.location.hostname);
+  if (isLocalBrowser && /(localhost|127\.0\.0\.1)(:\d+)?/i.test(value)) {
+    return '';
+  }
+
   // Accept relative API root like /backend or /api-gateway.
   if (value.startsWith('/')) {
     return value.replace(/\/$/, '');
@@ -28,9 +33,9 @@ function normalizeApiRoot(rawValue) {
 
 const ENV_API_ROOT = normalizeApiRoot(import.meta.env.VITE_API_URL || '');
 const IS_LOCAL_HOST = ['localhost', '127.0.0.1'].includes(window.location.hostname);
-const DEFAULT_API_ROOT = IS_LOCAL_HOST ? 'http://localhost:8000' : REMOTE_API_ROOT;
+const DEFAULT_API_ROOT = IS_LOCAL_HOST ? '' : REMOTE_API_ROOT;
 const API_ROOT = ENV_API_ROOT || DEFAULT_API_ROOT;
-const API_BASE = API_ROOT.endsWith('/api') ? API_ROOT : `${API_ROOT}/api`;
+const API_BASE = !API_ROOT ? '/api' : (API_ROOT.endsWith('/api') ? API_ROOT : `${API_ROOT}/api`);
 
 /**
  * Make an API request

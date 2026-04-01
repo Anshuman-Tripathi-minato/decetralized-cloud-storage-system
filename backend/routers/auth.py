@@ -9,6 +9,7 @@ from backend.core.security import create_access_token, get_current_user
 from backend.core.config import settings
 from backend.core.database import get_db
 from backend.services.token_service import AST_SIGNUP_BONUS, apply_daily_storage_rewards, ensure_signup_bonus, reconcile_balance_from_transactions
+from backend.services.blockchain_service import record_blockchain_event
 from passlib.context import CryptContext
 
 router = APIRouter()
@@ -95,7 +96,7 @@ async def register_node(req: NodeRegisterRequest):
     })
 
     # Log to blockchain
-    await _log_blockchain_event(db, "NODE_REGISTERED", req.node_id, {
+    await record_blockchain_event(db, "NODE_REGISTERED", req.node_id, {
         "fingerprint": req.public_key_fingerprint
     })
 
@@ -226,27 +227,3 @@ async def get_my_transactions(
 
 # ── Helper ────────────────────────────────────────────────────────────
 
-async def _log_blockchain_event(db, event_type: str, node_id: str, metadata: dict):
-    """Write a blockchain event to MongoDB."""
-    import hashlib, json, uuid
-    tx_data = {
-        "event_type": event_type,
-        "node_id": node_id,
-        "metadata": metadata,
-        "timestamp": datetime.utcnow().isoformat(),
-        "nonce": str(uuid.uuid4()),
-    }
-    tx_hash = hashlib.sha256(json.dumps(tx_data, sort_keys=True).encode()).hexdigest()
-    next_block = await db.blockchain_logs.count_documents({}) + 1
-    await db.blockchain_logs.insert_one({
-        "tx_hash": tx_hash,
-        "event_type": event_type,
-        "node_id": node_id,
-        "metadata": metadata,
-        "block_number": next_block,
-        "block_height": next_block,
-        "channel": "decentrastore-channel",
-        "chaincode": "storage-contract",
-        "timestamp": datetime.utcnow(),
-        "status": "VALID",
-    })

@@ -3,6 +3,7 @@ from fastapi import APIRouter, Depends, Query
 from backend.core.security import get_current_admin
 from backend.core.database import get_db
 from datetime import datetime
+from backend.services.blockchain_service import normalize_blockchain_event_category
 
 router = APIRouter()
 
@@ -19,12 +20,22 @@ async def get_blockchain_logs(
 
     query = {}
     if event_type:
-        query["event_type"] = event_type
+        normalized_event_type = event_type.strip().lower()
+        if normalized_event_type == "all":
+            pass
+        else:
+            query = {
+                "$or": [
+                    {"event_category": normalize_blockchain_event_category(event_type)},
+                    {"event_type": event_type},
+                ]
+            }
 
     cursor = db.blockchain_logs.find(query).sort("timestamp", -1).limit(limit)
     logs = []
     async for doc in cursor:
         doc["_id"] = str(doc["_id"])
+        doc["event_category"] = doc.get("event_category") or normalize_blockchain_event_category(doc.get("event_type"))
         if isinstance(doc.get("timestamp"), datetime):
             doc["timestamp"] = doc["timestamp"].isoformat()
         logs.append(doc)
@@ -61,9 +72,14 @@ async def blockchain_stats(admin: dict = Depends(get_current_admin)):
 
     if db:
         total_tx = await db.blockchain_logs.count_documents({})
-        pipeline = [{"$group": {"_id": "$event_type", "count": {"$sum": 1}}}]
+        pipeline = [{"$group": {"_id": "$event_category", "count": {"$sum": 1}}}]
         async for doc in db.blockchain_logs.aggregate(pipeline):
             events[doc["_id"]] = doc["count"]
+
+        if not events:
+            legacy_pipeline = [{"$group": {"_id": "$event_type", "count": {"$sum": 1}}}]
+            async for doc in db.blockchain_logs.aggregate(legacy_pipeline):
+                events[normalize_blockchain_event_category(doc["_id"])] = events.get(normalize_blockchain_event_category(doc["_id"]), 0) + doc["count"]
 
         latest_log = await db.blockchain_logs.find_one({}, sort=[("block_number", -1)])
         if latest_log:

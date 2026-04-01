@@ -5,6 +5,7 @@ from typing import Optional
 from datetime import datetime
 from backend.core.security import get_current_user
 from backend.core.database import get_db
+from backend.services.blockchain_service import record_blockchain_event
 from backend.services.provider_agent_service import get_provider_agent_service
 from backend.services.token_service import AST_UPLOAD_COST_PER_MB, calculate_upload_cost, apply_daily_storage_rewards
 import base64
@@ -286,6 +287,19 @@ async def upload_file_metadata(
         "timestamp": datetime.utcnow(),
     })
 
+    await record_blockchain_event(
+        db,
+        "UPLOAD_CHARGE",
+        current_user["sub"],
+        {
+            "cid": file_metadata.cid,
+            "filename": file_metadata.filename,
+            "size_bytes": file_metadata.size,
+            "upload_cost_ast": upload_cost,
+            "storage_nodes": [node.get("node_id") for node in storage_nodes if node.get("node_id")],
+        },
+    )
+
     file_doc = {
         "cid": file_metadata.cid,
         "owner_node_id": current_user["sub"],
@@ -434,6 +448,18 @@ async def upload_chunk(
         successful_replicas=successful_replicas,
         chunk_index=chunk_index,
         is_complete=is_complete,
+    )
+
+    await record_blockchain_event(
+        db,
+        "UPLOAD_HOSTING_REWARD",
+        file_doc.get("owner_node_id") or "unknown",
+        {
+            "cid": file_doc.get("cid"),
+            "chunk_index": chunk_index,
+            "recipients": reward_distribution.get("recipients", []),
+            "distributed_ast": reward_distribution.get("distributed_ast", 0.0),
+        },
     )
 
     return {
@@ -628,6 +654,17 @@ async def delete_file(cid: str, current_user: dict = Depends(get_current_user)):
 
     # Delete file metadata
     await db.files.delete_one({"cid": cid})
+
+    await record_blockchain_event(
+        db,
+        "FILE_DELETED",
+        current_user["sub"],
+        {
+            "cid": cid,
+            "filename": file_doc.get("filename"),
+            "remote_cleanup": remote_cleanup_results,
+        },
+    )
 
     return {
         "cid": cid,

@@ -4,12 +4,25 @@ import { useTheme } from '../../context/ThemeContext';
 import { getBlockchainLogs, getBlockchainLog } from '../../utils/api';
 import { formatUtcTimestamp } from '../../utils/time';
 
+const EVENT_CATEGORY_LABELS = {
+  upload: 'Upload',
+  download: 'Download',
+  pledge: 'Pledge',
+  reward: 'Reward',
+  delete: 'Delete',
+  register: 'Register',
+};
+
+function getLogCategory(log) {
+  return (log?.event_category || log?.event_type || 'unknown').toString().toLowerCase();
+}
+
 export default function BlockchainLogsPage() {
   const { isDark } = useTheme();
   const [logs, setLogs] = useState([]);
   const [loading, setLoading] = useState(true);
   const [selectedLog, setSelectedLog] = useState(null);
-  const [filter, setFilter] = useState('all'); // all, upload, download, pledge, reward
+  const [filter, setFilter] = useState('all'); // all, upload, download, pledge, reward, delete, register
   const [searchTerm, setSearchTerm] = useState('');
 
   useEffect(() => {
@@ -21,7 +34,10 @@ export default function BlockchainLogsPage() {
   const loadLogs = async () => {
     try {
       const data = await getBlockchainLogs(100, filter === 'all' ? null : filter);
-      setLogs(data.logs || []);
+      setLogs((data.logs || []).map((log) => ({
+        ...log,
+        event_category: getLogCategory(log),
+      })));
     } catch (err) {
       console.error('Failed to load blockchain logs:', err);
     } finally {
@@ -43,7 +59,8 @@ export default function BlockchainLogsPage() {
       return (
         log.tx_hash.toLowerCase().includes(searchTerm.toLowerCase()) ||
         log.node_id?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        log.event_type.toLowerCase().includes(searchTerm.toLowerCase())
+        log.event_type.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        getLogCategory(log).includes(searchTerm.toLowerCase())
       );
     }
     return true;
@@ -127,7 +144,7 @@ export default function BlockchainLogsPage() {
             <div className={`flex gap-2 p-1 rounded-xl ${
               isDark ? 'bg-white/5' : 'bg-gray-100'
             }`}>
-              {['all', 'upload', 'download', 'pledge', 'reward', 'register'].map(type => (
+              {['all', 'upload', 'download', 'pledge', 'reward', 'delete', 'register'].map(type => (
                 <button
                   key={type}
                   onClick={() => setFilter(type)}
@@ -149,7 +166,7 @@ export default function BlockchainLogsPage() {
           {/* Stats Row */}
           <div className="grid grid-cols-5 gap-4 mt-6">
             {Object.entries(eventTypeColors).map(([type, colors]) => {
-              const count = logs.filter(l => l.event_type === type).length;
+              const count = logs.filter(l => getLogCategory(l) === type).length;
               return (
                 <div key={type} className={`p-3 rounded-xl ${isDark ? 'bg-white/5' : 'bg-white'}`}>
                   <div className="flex items-center justify-between">
@@ -157,7 +174,7 @@ export default function BlockchainLogsPage() {
                     <span className="text-xl font-black">{count}</span>
                   </div>
                   <p className={`text-xs mt-1 ${isDark ? 'text-white/40' : 'text-gray-500'}`}>
-                    {type.charAt(0).toUpperCase() + type.slice(1)}
+                    {EVENT_CATEGORY_LABELS[type] || type.charAt(0).toUpperCase() + type.slice(1)}
                   </p>
                 </div>
               );
@@ -210,7 +227,7 @@ export default function BlockchainLogsPage() {
               </thead>
               <tbody>
                 {filteredLogs.map((log, idx) => {
-                  const colors = eventTypeColors[log.event_type] || eventTypeColors.upload;
+                  const colors = eventTypeColors[getLogCategory(log)] || eventTypeColors.upload;
                   return (
                     <tr
                       key={idx}
