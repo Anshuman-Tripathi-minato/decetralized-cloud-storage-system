@@ -9,7 +9,14 @@ function normalizeApiRoot(rawValue) {
   if (!value) return '';
 
   const isLocalBrowser = ['localhost', '127.0.0.1'].includes(window.location.hostname);
+  const isVercelBrowser = /\.vercel\.app$/i.test(window.location.hostname);
   if (isLocalBrowser && /(localhost|127\.0\.0\.1)(:\d+)?/i.test(value)) {
+    return '';
+  }
+
+  // On Vercel, "/api" only works when rewrites are configured.
+  // If rewrites are missing, fallback to default remote API root.
+  if (isVercelBrowser && value === '/api') {
     return '';
   }
 
@@ -28,6 +35,12 @@ function normalizeApiRoot(rawValue) {
   }
 
   // If env value is host-only, assume HTTPS to avoid invalid fetch URLs.
+  // Reject single-label hosts (for example "decentralized-cloud-k") because
+  // they frequently indicate a truncated or invalid production hostname.
+  if (!value.includes('.')) {
+    return '';
+  }
+
   return `https://${value}`.replace(/\/$/, '');
 }
 
@@ -36,6 +49,26 @@ const IS_LOCAL_HOST = ['localhost', '127.0.0.1'].includes(window.location.hostna
 const DEFAULT_API_ROOT = IS_LOCAL_HOST ? '' : REMOTE_API_ROOT;
 const API_ROOT = ENV_API_ROOT || DEFAULT_API_ROOT;
 const API_BASE = !API_ROOT ? '/api' : (API_ROOT.endsWith('/api') ? API_ROOT : `${API_ROOT}/api`);
+const REMOTE_API_BASE = `${REMOTE_API_ROOT}/api`;
+
+function shouldRetryWithRemoteFallback(error) {
+  if (!error) return false;
+  const message = String(error.message || '').toLowerCase();
+  return (
+    message.includes('failed to fetch') ||
+    message.includes('networkerror') ||
+    message.includes('err_name_not_resolved')
+  );
+}
+
+async function fetchJsonWithErrors(url, config) {
+  const response = await fetch(url, config);
+  if (!response.ok) {
+    const error = await response.json().catch(() => ({ detail: 'Request failed' }));
+    throw new Error(error.detail || `HTTP ${response.status}`);
+  }
+  return response.json();
+}
 
 /**
  * Make an API request
@@ -45,6 +78,7 @@ const API_BASE = !API_ROOT ? '/api' : (API_ROOT.endsWith('/api') ? API_ROOT : `$
  */
 async function apiRequest(endpoint, options = {}) {
   const url = `${API_BASE}${endpoint}`;
+  const fallbackUrl = `${REMOTE_API_BASE}${endpoint}`;
   
   const config = {
     ...options,
@@ -63,14 +97,15 @@ async function apiRequest(endpoint, options = {}) {
     config.headers['Authorization'] = `Bearer ${token}`;
   }
 
-  const response = await fetch(url, config);
-  
-  if (!response.ok) {
-    const error = await response.json().catch(() => ({ detail: 'Request failed' }));
-    throw new Error(error.detail || `HTTP ${response.status}`);
+  try {
+    return await fetchJsonWithErrors(url, config);
+  } catch (error) {
+    // Production safety net: if env/rewrite DNS fails, retry the known remote API.
+    if (fallbackUrl !== url && shouldRetryWithRemoteFallback(error)) {
+      return fetchJsonWithErrors(fallbackUrl, config);
+    }
+    throw error;
   }
-
-  return response.json();
 }
 
 // ── Auth Endpoints ────────────────────────────────────────────────────
@@ -175,20 +210,35 @@ export async function uploadChunk(chunkId, chunkIndex, chunkData, cid, chunkHash
   formData.append('chunk_hash', chunkHash);
   
   const token = localStorage.getItem('decentrastore-token');
-  const response = await fetch(`${API_BASE}/files/chunks/upload`, {
+  const config = {
     method: 'POST',
     headers: {
       'Authorization': `Bearer ${token}`,
     },
     body: formData,
-  });
-  
-  if (!response.ok) {
-    const error = await response.json().catch(() => ({ detail: 'Chunk upload failed' }));
-    throw new Error(error.detail);
+  };
+
+  const primaryUrl = `${API_BASE}/files/chunks/upload`;
+  const fallbackUrl = `${REMOTE_API_BASE}/files/chunks/upload`;
+
+  try {
+    const response = await fetch(primaryUrl, config);
+    if (!response.ok) {
+      const error = await response.json().catch(() => ({ detail: 'Chunk upload failed' }));
+      throw new Error(error.detail);
+    }
+    return response.json();
+  } catch (error) {
+    if (fallbackUrl !== primaryUrl && shouldRetryWithRemoteFallback(error)) {
+      const response = await fetch(fallbackUrl, config);
+      if (!response.ok) {
+        const fallbackError = await response.json().catch(() => ({ detail: 'Chunk upload failed' }));
+        throw new Error(fallbackError.detail);
+      }
+      return response.json();
+    }
+    throw error;
   }
-  
-  return response.json();
 }
 
 /**
