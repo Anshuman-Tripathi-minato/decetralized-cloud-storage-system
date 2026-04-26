@@ -9,7 +9,14 @@ function normalizeApiRoot(rawValue) {
   if (!value) return '';
 
   const isLocalBrowser = ['localhost', '127.0.0.1'].includes(window.location.hostname);
+  const isVercelBrowser = /\.vercel\.app$/i.test(window.location.hostname);
   if (isLocalBrowser && /(localhost|127\.0\.0\.1)(:\d+)?/i.test(value)) {
+    return '';
+  }
+
+  // On Vercel, "/api" only works when rewrites are configured.
+  // If rewrites are missing, fallback to default remote API root.
+  if (isVercelBrowser && value === '/api') {
     return '';
   }
 
@@ -28,6 +35,12 @@ function normalizeApiRoot(rawValue) {
   }
 
   // If env value is host-only, assume HTTPS to avoid invalid fetch URLs.
+  // Reject single-label hosts (for example "decentralized-cloud-k") because
+  // they frequently indicate a truncated or invalid production hostname.
+  if (!value.includes('.')) {
+    return '';
+  }
+
   return `https://${value}`.replace(/\/$/, '');
 }
 
