@@ -2,7 +2,11 @@
  * API Client for DecentraStore Backend
  */
 
-const REMOTE_API_ROOT = 'https://decentralized-cloud-storage-system-production.up.railway.app';
+const REMOTE_API_ROOTS = [
+  // Keep both spellings because production projects were created with inconsistent names.
+  'https://decetralized-cloud-storage-system-production.up.railway.app',
+  'https://decentralized-cloud-storage-system-production.up.railway.app',
+];
 
 function normalizeApiRoot(rawValue) {
   const value = (rawValue || '').trim();
@@ -46,10 +50,11 @@ function normalizeApiRoot(rawValue) {
 
 const ENV_API_ROOT = normalizeApiRoot(import.meta.env.VITE_API_URL || '');
 const IS_LOCAL_HOST = ['localhost', '127.0.0.1'].includes(window.location.hostname);
-const DEFAULT_API_ROOT = IS_LOCAL_HOST ? '' : REMOTE_API_ROOT;
+const ENABLE_REMOTE_FALLBACK = !IS_LOCAL_HOST;
+const DEFAULT_API_ROOT = IS_LOCAL_HOST ? '' : REMOTE_API_ROOTS[0];
 const API_ROOT = ENV_API_ROOT || DEFAULT_API_ROOT;
 const API_BASE = !API_ROOT ? '/api' : (API_ROOT.endsWith('/api') ? API_ROOT : `${API_ROOT}/api`);
-const REMOTE_API_BASE = `${REMOTE_API_ROOT}/api`;
+const REMOTE_API_BASES = REMOTE_API_ROOTS.map((root) => `${root}/api`);
 
 function shouldRetryWithRemoteFallback(error) {
   if (!error) return false;
@@ -78,7 +83,7 @@ async function fetchJsonWithErrors(url, config) {
  */
 async function apiRequest(endpoint, options = {}) {
   const url = `${API_BASE}${endpoint}`;
-  const fallbackUrl = `${REMOTE_API_BASE}${endpoint}`;
+  const fallbackUrls = REMOTE_API_BASES.map((base) => `${base}${endpoint}`);
   
   const config = {
     ...options,
@@ -100,9 +105,16 @@ async function apiRequest(endpoint, options = {}) {
   try {
     return await fetchJsonWithErrors(url, config);
   } catch (error) {
-    // Production safety net: if env/rewrite DNS fails, retry the known remote API.
-    if (fallbackUrl !== url && shouldRetryWithRemoteFallback(error)) {
-      return fetchJsonWithErrors(fallbackUrl, config);
+    // Production safety net: if env/rewrite DNS fails, retry known remote API roots.
+    if (ENABLE_REMOTE_FALLBACK && shouldRetryWithRemoteFallback(error)) {
+      for (const fallbackUrl of fallbackUrls) {
+        if (fallbackUrl === url) continue;
+        try {
+          return await fetchJsonWithErrors(fallbackUrl, config);
+        } catch (_fallbackError) {
+          // Keep trying remaining fallback hosts.
+        }
+      }
     }
     throw error;
   }
@@ -219,7 +231,7 @@ export async function uploadChunk(chunkId, chunkIndex, chunkData, cid, chunkHash
   };
 
   const primaryUrl = `${API_BASE}/files/chunks/upload`;
-  const fallbackUrl = `${REMOTE_API_BASE}/files/chunks/upload`;
+  const fallbackUrls = REMOTE_API_BASES.map((base) => `${base}/files/chunks/upload`);
 
   try {
     const response = await fetch(primaryUrl, config);
@@ -229,13 +241,17 @@ export async function uploadChunk(chunkId, chunkIndex, chunkData, cid, chunkHash
     }
     return response.json();
   } catch (error) {
-    if (fallbackUrl !== primaryUrl && shouldRetryWithRemoteFallback(error)) {
-      const response = await fetch(fallbackUrl, config);
-      if (!response.ok) {
-        const fallbackError = await response.json().catch(() => ({ detail: 'Chunk upload failed' }));
-        throw new Error(fallbackError.detail);
+    if (ENABLE_REMOTE_FALLBACK && shouldRetryWithRemoteFallback(error)) {
+      for (const fallbackUrl of fallbackUrls) {
+        if (fallbackUrl === primaryUrl) continue;
+        const response = await fetch(fallbackUrl, config).catch(() => null);
+        if (!response) continue;
+        if (!response.ok) {
+          const fallbackError = await response.json().catch(() => ({ detail: 'Chunk upload failed' }));
+          throw new Error(fallbackError.detail);
+        }
+        return response.json();
       }
-      return response.json();
     }
     throw error;
   }
