@@ -16,7 +16,7 @@ def _format_last_seen(value):
 async def get_peers(limit: int = 20):
     """Get real P2P peer list from registered users."""
     db = get_db()
-    if db is None:
+    if not db:
         return {
             "total_peers": 0,
             "online_peers": 0,
@@ -104,7 +104,7 @@ async def get_topology():
 async def metrics_history():
     """Return real network summary and optional historical data."""
     db = get_db()
-    if db is None:
+    if not db:
         return {
             "interval": "hourly",
             "data": [],
