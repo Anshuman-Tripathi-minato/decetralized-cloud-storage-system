@@ -2,12 +2,6 @@
  * API Client for DecentraStore Backend
  */
 
-const REMOTE_API_ROOTS = [
-  // Keep both spellings because production projects were created with inconsistent names.
-  'https://decetralized-cloud-storage-system-production.up.railway.app',
-  'https://decentralized-cloud-storage-system-production.up.railway.app',
-];
-
 function normalizeApiRoot(rawValue) {
   const value = (rawValue || '').trim();
   if (!value) return '';
@@ -17,18 +11,17 @@ function normalizeApiRoot(rawValue) {
     return '';
   }
 
-  // Treat "/api" as a local-development proxy path only.
-  // Production builds should fall through to the configured remote root.
+  if (/^https?:\/\//i.test(value)) {
+    return value.replace(/\/$/, '');
+  }
+
+  // Treat "/api" as the deployed same-origin API path.
   if (value === '/api') {
-    return '';
+    return '/api';
   }
 
   // Accept relative API root like /backend or /api-gateway.
   if (value.startsWith('/')) {
-    return value.replace(/\/$/, '');
-  }
-
-  if (/^https?:\/\//i.test(value)) {
     return value.replace(/\/$/, '');
   }
 
@@ -49,21 +42,9 @@ function normalizeApiRoot(rawValue) {
 
 const ENV_API_ROOT = normalizeApiRoot(import.meta.env.VITE_API_URL || '');
 const IS_LOCAL_HOST = ['localhost', '127.0.0.1'].includes(window.location.hostname);
-const ENABLE_REMOTE_FALLBACK = !IS_LOCAL_HOST;
-const DEFAULT_API_ROOT = IS_LOCAL_HOST ? '' : REMOTE_API_ROOTS[0];
-const API_ROOT = ENV_API_ROOT || DEFAULT_API_ROOT;
-const API_BASE = !API_ROOT ? '/api' : (API_ROOT.endsWith('/api') ? API_ROOT : `${API_ROOT}/api`);
-const REMOTE_API_BASES = REMOTE_API_ROOTS.map((root) => `${root}/api`);
-
-function shouldRetryWithRemoteFallback(error) {
-  if (!error) return false;
-  const message = String(error.message || '').toLowerCase();
-  return (
-    message.includes('failed to fetch') ||
-    message.includes('networkerror') ||
-    message.includes('err_name_not_resolved')
-  );
-}
+const API_BASE = IS_LOCAL_HOST
+  ? '/api'
+  : (ENV_API_ROOT ? (ENV_API_ROOT.endsWith('/api') ? ENV_API_ROOT : `${ENV_API_ROOT}/api`) : '/api');
 
 async function fetchJsonWithErrors(url, config) {
   const response = await fetch(url, config);
@@ -82,8 +63,7 @@ async function fetchJsonWithErrors(url, config) {
  */
 async function apiRequest(endpoint, options = {}) {
   const url = `${API_BASE}${endpoint}`;
-  const fallbackUrls = REMOTE_API_BASES.map((base) => `${base}${endpoint}`);
-  
+
   const config = {
     ...options,
     headers: {
@@ -101,22 +81,7 @@ async function apiRequest(endpoint, options = {}) {
     config.headers['Authorization'] = `Bearer ${token}`;
   }
 
-  try {
-    return await fetchJsonWithErrors(url, config);
-  } catch (error) {
-    // Production safety net: if env/rewrite DNS fails, retry known remote API roots.
-    if (ENABLE_REMOTE_FALLBACK && shouldRetryWithRemoteFallback(error)) {
-      for (const fallbackUrl of fallbackUrls) {
-        if (fallbackUrl === url) continue;
-        try {
-          return await fetchJsonWithErrors(fallbackUrl, config);
-        } catch (_fallbackError) {
-          // Keep trying remaining fallback hosts.
-        }
-      }
-    }
-    throw error;
-  }
+  return fetchJsonWithErrors(url, config);
 }
 
 // ── Auth Endpoints ────────────────────────────────────────────────────

@@ -129,7 +129,7 @@ Set `frontend/.env`:
 VITE_API_URL=/api
 ```
 
-If omitted, frontend uses the local Vite `/api` proxy when running on localhost and the deployed API root in production.
+If omitted, the frontend uses `/api` in both localhost and Vercel builds. Local development uses the Vite proxy, and Vercel uses the `vercel.json` rewrite to reach Railway.
 
 ## Authentication Flows
 
@@ -235,6 +235,7 @@ Blockchain log categories in the admin UI:
 
 ### 1) Frontend shows `ERR_NAME_NOT_RESOLVED` or `Failed to fetch`
 - ensure `frontend/.env` has `VITE_API_URL=/api`
+- ensure Vercel is deploying the repo with `vercel.json` present
 - restart frontend after env changes
 - hard refresh browser
 
