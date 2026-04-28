@@ -46,7 +46,7 @@ async def network_stats(admin: dict = Depends(get_current_admin)):
     throughput = 0
     last_block = 0
     
-    if db:
+    if db is not None:
         total_nodes = await db.users.count_documents({})
         active_nodes = await db.users.count_documents({"is_active": True})
         total_files = await db.files.count_documents({})
@@ -78,7 +78,7 @@ async def network_stats(admin: dict = Depends(get_current_admin)):
             last_block = latest_log.get("block_number") or latest_log.get("block_height") or 0
 
     pledged_storage_bytes = 0
-    if db:
+    if db is not None:
         pledge_pipeline = [{"$group": {"_id": None, "total_pledged": {"$sum": "$storage_pledged"}}}]
         async for doc in db.users.aggregate(pledge_pipeline):
             pledged_storage_bytes = doc.get("total_pledged", 0)
@@ -109,7 +109,7 @@ async def network_stats(admin: dict = Depends(get_current_admin)):
 @router.get("/nodes")
 async def list_nodes(admin: dict = Depends(get_current_admin)):
     db = get_db()
-    if not db:
+    if db is None:
         return {"nodes": []}
     cursor = db.users.find({}, {"keystore_encrypted": 0}).sort("registered_at", -1).limit(50)
     nodes = []
@@ -129,7 +129,7 @@ async def list_nodes(admin: dict = Depends(get_current_admin)):
 async def admin_storage_distribution(limit: int = 200, admin: dict = Depends(get_current_admin)):
     """Full admin view of which file is mapped to which nodes (IDs + IPs)."""
     db = get_db()
-    if not db:
+    if db is None:
         return {
             "summary": {
                 "total_files": 0,
@@ -204,7 +204,7 @@ async def admin_storage_distribution(limit: int = 200, admin: dict = Depends(get
 @router.patch("/nodes/{node_id}/ban")
 async def ban_node(node_id: str, admin: dict = Depends(get_current_admin)):
     db = get_db()
-    if db:
+    if db is not None:
         await db.users.update_one({"node_id": node_id}, {"$set": {"is_active": False}})
     return {"message": f"Node {node_id} banned", "node_id": node_id}
 

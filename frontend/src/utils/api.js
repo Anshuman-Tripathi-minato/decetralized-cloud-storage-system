@@ -13,14 +13,13 @@ function normalizeApiRoot(rawValue) {
   if (!value) return '';
 
   const isLocalBrowser = ['localhost', '127.0.0.1'].includes(window.location.hostname);
-  const isVercelBrowser = /\.vercel\.app$/i.test(window.location.hostname);
   if (isLocalBrowser && /(localhost|127\.0\.0\.1)(:\d+)?/i.test(value)) {
     return '';
   }
 
-  // On Vercel, "/api" only works when rewrites are configured.
-  // If rewrites are missing, fallback to default remote API root.
-  if (isVercelBrowser && value === '/api') {
+  // Treat "/api" as a local-development proxy path only.
+  // Production builds should fall through to the configured remote root.
+  if (value === '/api') {
     return '';
   }
 

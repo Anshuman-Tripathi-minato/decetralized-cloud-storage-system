@@ -15,7 +15,7 @@ async def get_blockchain_logs(
     admin: dict = Depends(get_current_admin),
 ):
     db = get_db()
-    if not db:
+    if db is None:
         return {"logs": [], "total": 0}
 
     query = {}
@@ -47,7 +47,7 @@ async def get_blockchain_logs(
 @router.get("/logs/{tx_hash}")
 async def get_log_by_hash(tx_hash: str, admin: dict = Depends(get_current_admin)):
     db = get_db()
-    if not db:
+    if db is None:
         return {"error": "Database unavailable"}
 
     log = await db.blockchain_logs.find_one({"tx_hash": tx_hash})
@@ -70,7 +70,7 @@ async def blockchain_stats(admin: dict = Depends(get_current_admin)):
     chaincode_version = "unknown"
     consensus = "unknown"
 
-    if db:
+    if db is not None:
         total_tx = await db.blockchain_logs.count_documents({})
         pipeline = [{"$group": {"_id": "$event_category", "count": {"$sum": 1}}}]
         async for doc in db.blockchain_logs.aggregate(pipeline):
