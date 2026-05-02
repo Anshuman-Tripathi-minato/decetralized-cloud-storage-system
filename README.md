@@ -26,6 +26,79 @@ All core sprint features are implemented in the current codebase:
 - resilient local startup script with health-check retries
 - blockchain logs normalized by category for admin charts and filters
 
+## Screenshots
+
+**Wireframe/site map diagram**
+![Wireframe/site map diagram](docs/screenshots/Screenshot%20from%202026-02-19%2021-54-29.png)
+
+**Landing page "How it Works" and "Built for Zero Trust" sections**
+![Landing page overview](docs/screenshots/Screenshot%20from%202026-04-29%2019-38-16.png)
+![Built for Zero Trust section](docs/screenshots/Screenshot%20from%202026-04-29%2019-39-11.png)
+![How DecentraStore Works section](docs/screenshots/Screenshot%20from%202026-04-29%2019-39-36.png)
+![Landing page call to action](docs/screenshots/Screenshot%20from%202026-04-29%2019-39-45.png)
+
+**Setup Your Storage Node/Generate Keypair screen**
+![Setup Your Storage Node](docs/screenshots/Screenshot%20from%202026-04-29%2019-40-12.png)
+
+**Connect Your Node / keystore upload screen**
+![Connect Your Node](docs/screenshots/Screenshot%20from%202026-04-29%2019-40-26.png)
+
+**Keypair Generated Successfully screen**
+![Keypair Generated Successfully](docs/screenshots/Screenshot%20from%202026-04-29%2019-40-40.png)
+
+**Welcome to DecentraStore / Node Active screen**
+![Welcome to DecentraStore](docs/screenshots/Screenshot%20from%202026-04-29%2019-40-47.png)
+
+**Node Dashboard (user portal overview)**
+![Node Dashboard](docs/screenshots/Screenshot%20from%202026-04-29%2019-40-57.png)
+
+**User dashboard recent activity and quick actions**
+![Recent Activity and Quick Actions](docs/screenshots/Screenshot%20from%202026-04-29%2019-41-09.png)
+
+**Upload File page & My Files page**
+![Upload File page](docs/screenshots/Screenshot%20from%202026-04-29%2019-41-17.png)
+![Upload file selected](docs/screenshots/Screenshot%20from%202026-04-30%2000-22-15.png)
+![Upload successful](docs/screenshots/Screenshot%20from%202026-04-30%2000-22-56.png)
+![My Files page](docs/screenshots/Screenshot%20from%202026-04-30%2000-23-46.png)
+
+**Storage Node - Current Pledge / Pledge Additional Storage**
+![Storage Node pledge](docs/screenshots/Screenshot%20from%202026-04-29%2019-41-35.png)
+
+**Storage Node - Provider Node Agent URL + Docker folder**
+![Storage Node provider agent URL](docs/screenshots/Screenshot%20from%202026-04-29%2019-41-46.png)
+
+**Storage Node - Successfully pledged 10 GB confirmation**
+![Storage pledge confirmation](docs/screenshots/Screenshot%20from%202026-04-29%2019-42-02.png)
+
+**Storage Container - Running, Container ID, Allocated Storage**
+![Storage container running](docs/screenshots/Screenshot%20from%202026-04-29%2019-42-14.png)
+
+**AST Wallet - Transaction History + Earn/Spend More AST**
+![AST Wallet balance](docs/screenshots/Screenshot%20from%202026-04-30%2000-33-42.png)
+![AST Wallet summary](docs/screenshots/Screenshot%20from%202026-04-30%2000-34-05.png)
+![AST Wallet transaction history](docs/screenshots/Screenshot%20from%202026-04-30%2000-34-51.png)
+
+**Admin Console login screen**
+![Admin Console login](docs/screenshots/a/Screenshot%20from%202026-04-29%2019-43-25.png)
+
+**Admin Global Dashboard displaying real-time network statistics retrieved via GET /api/admin/stats - showing Active Peers, Throughput, Total Nodes, Stored Files, Total Storage, and Network Health status.**
+![Admin Global Dashboard](docs/screenshots/a/Screenshot%20from%202026-04-30%2000-40-07.png)
+
+**File Storage Distribution view in Admin Dashboard - demonstrating the files, chunks, and storage_containers MongoDB collections working together, showing CID, replica count, chunk count, owner node ID, and active storage node assignment.**
+![File Storage Distribution](docs/screenshots/a/Screenshot%20from%202026-04-30%2000-41-44.png)
+
+**Network Monitor (P2P Topology, Peer Node Status table)**
+![Network Monitor](docs/screenshots/a/Screenshot%20from%202026-04-30%2000-40-39.png)
+
+**Blockchain Logs (Transaction History with TX hashProtocol)**
+![Blockchain Logs](docs/screenshots/a/Screenshot%20from%202026-04-30%2000-40-49.png)
+
+**Protocol Settings (Replication Factor, Chunk Size, Tokenomics)**
+![Protocol Settings](docs/screenshots/a/Screenshot%20from%202026-04-30%2000-42-19.png)
+
+**Node Registry (2 registered nodes with balances, storage pledged)**
+![Node Registry](docs/screenshots/a/Screenshot%20from%202026-04-30%2000-42-34.png)
+
 ## Tech Stack
 
 ### Backend
