@@ -11,6 +11,14 @@ A decentralized cloud storage prototype with:
 - provider-agent Docker containers on provider machines
 - admin observability for nodes, files, network, and blockchain logs
 
+# Deployed link
+
+frontend- [https://decetralized-cloud-storage-system-cqzib464c.vercel.app/](https://decetralized-cloud-storage-system-cqzib464c.vercel.app/)
+
+backend- [https://decetralized-cloud-storage-system-production.up.railway.app/](https://decetralized-cloud-storage-system-production.up.railway.app/)
+
+mongo- [https://nozomi.proxy.rlwy.net/](https://nozomi.proxy.rlwy.net/)
+
 ## Current Status
 
 All core sprint features are implemented in the current codebase:
